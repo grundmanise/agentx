@@ -364,6 +364,11 @@ export class MockCli {
 
   /** How many times the app started serve. */
   serveStarts = 0;
+  /**
+   * Whether serve answers each refresh request as it reads it, ok, as after a scan that found no
+   * change. A test that answers the requests itself, to say when and with what, turns it off first.
+   */
+  answersRefreshes = true;
 
   private readonly page: Page;
   private readonly replies = new Map<string, Pending>();
@@ -930,8 +935,19 @@ export class MockCli {
             : { query, request_id: id, type: method }
         )
       );
+      if (method === "refresh" && this.answersRefreshes) {
+        void this.answerRefresh(id);
+      }
     } else {
       this.refuse(`serve has no method ${String(method)}`);
+    }
+  }
+
+  private async answerRefresh(id: string) {
+    try {
+      await this.serveEmit([{ request_id: id, type: "refresh_complete" }]);
+    } catch {
+      // The page closed while the request waited: nothing reads its answer.
     }
   }
 

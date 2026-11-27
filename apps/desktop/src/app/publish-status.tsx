@@ -45,7 +45,7 @@ import {
 } from "#/screens/skills/publish.ts";
 import type { ToPublish } from "#/screens/skills/publish.ts";
 import { useSkillRows } from "#/screens/skills/rows.ts";
-import { useSettling } from "#/store/settle.ts";
+import { usePending } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /**
@@ -142,7 +142,7 @@ const describe = (
 
 export const PublishStatus = () => {
   const state = useSyncState();
-  const publishing = useSettling(PUBLISH_ALL);
+  const publishing = usePending(PUBLISH_ALL);
   const progress = usePublishProgress();
   const rim = usePublishRim();
   const lastChecked = useAppStore((s) => s.lastChecked);

@@ -24,7 +24,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { currentRows } from "#/screens/skills/rows.ts";
 import { addSource, updateSkill } from "#/screens/skills/updates.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { afterSettled, runUntilSettled } from "#/store/settle.ts";
+import { agentx } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of Publish all, which shows as pending while its publish runs. */
@@ -273,7 +273,7 @@ export const publishAll = async (names: readonly string[]) => {
     progress: undefined,
     rim: { fraction: 0, state: "running" },
   });
-  const outcome = await runUntilSettled(["skill", "publish", ...names], {
+  const outcome = await agentx(["skill", "publish", ...names], {
     failure: (ended) => publishFailure(ended),
     label: PUBLISH_ALL,
     onProgress: (event) => {
@@ -294,15 +294,8 @@ export const publishAll = async (names: readonly string[]) => {
   });
   const done = outcome.exitCode === EXIT_CODES.ok && !outcome.cancelled;
   useProgressStore.setState({
+    progress: undefined,
     rim: { fraction: done ? 1 : 0, state: done ? "done" : "stopped" },
-  });
-  // The pill stays busy until the inventory that follows arrives: it keeps the last count till then.
-  // A run that started since owns the count, so only this run's count goes.
-  const { progress } = useProgressStore.getState();
-  afterSettled(() => {
-    if (useProgressStore.getState().progress === progress) {
-      useProgressStore.setState({ progress: undefined });
-    }
   });
   const hubSet = hubOf(sourcesOf(useAppStore.getState())) !== undefined;
   if (refusedForHub(outcome, hubSet)) {

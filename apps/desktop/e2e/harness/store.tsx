@@ -16,7 +16,7 @@ declare global {
     store: {
       run: (args: string[], options: CommandOptions) => void;
       cancel: (label: string) => Promise<void>;
-      refresh: () => Promise<void>;
+      refresh: () => void;
       /** The store's state now: for a test that checks that something did not change. */
       state: () => AppState;
     };
@@ -24,7 +24,7 @@ declare global {
 }
 
 const StoreView = () => {
-  const { applied, freshness, inventory, refreshes } = useAppStore();
+  const { applied, freshness, inventory, pending, refreshes } = useAppStore();
   const { lines } = useActivityLog();
   const rows: [string, string][] = [
     ["Instance", applied?.instanceId ?? ""],
@@ -32,6 +32,7 @@ const StoreView = () => {
     ["Agents", String(inventory?.configurations.length ?? "")],
     ["Freshness", freshness.kind],
     ["Pending refreshes", String(Object.keys(refreshes).length)],
+    ["Running", Object.keys(pending).join(", ")],
   ];
   return (
     <>
@@ -58,7 +59,9 @@ mount(<StoreView />);
 
 window.store = {
   cancel: cancelCommand,
-  refresh,
+  refresh: () => {
+    void refresh();
+  },
   run: (args, options) => {
     void agentx(args, options);
   },

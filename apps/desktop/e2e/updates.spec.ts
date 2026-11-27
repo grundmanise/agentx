@@ -97,28 +97,11 @@ const updateDone = (
   type: "progress",
 });
 
-/** Answers every refresh request so far, once the command asked for one, as serve does after its scan. */
-const answerRefreshes = async (cli: MockCli) => {
-  await expect.poll(() => cli.requestIds.length).toBeGreaterThan(0);
-  await cli.serveEmit(
-    cli.requestIds.map((id) => ({
-      ok: true,
-      request_id: id,
-      scan_counter: 2,
-      type: "refresh_complete",
-    }))
-  );
-};
-
-/**
- * The scan that follows a command: an inventory whose library has an update for each skill of
- * `names`, then the answer to every refresh asked for.
- */
+/** The scan that follows a command: an inventory whose library has an update for each skill of `names`. */
 const rescan = async (cli: MockCli, names: readonly string[]) => {
   await cli.serveEmit([
     { ...inventoryOf(libraryWith(names)), scan_counter: 2 },
   ]);
-  await answerRefreshes(cli);
 };
 
 /**
@@ -390,7 +373,6 @@ test.describe("banners", () => {
     ).toBeVisible();
     // The scan that follows: the hub holds nothing new, and the candidate stays.
     await cli.serveEmit([{ ...inventoryOf(updatesLibrary), scan_counter: 2 }]);
-    await answerRefreshes(cli);
     const upstream = pane(page, "pdf-letters").getByRole("note", {
       name: "New version from acme/skills",
     });

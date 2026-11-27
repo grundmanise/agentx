@@ -243,6 +243,7 @@ test("a serve restart before the refresh is answered sends it again to the new c
   cli,
   page,
 }) => {
+  cli.answersRefreshes = false;
   await launch(cli, page);
   cli.register(["skill", "remove", "pdf"]);
 

@@ -2,8 +2,9 @@
 // runs, and the outcome is a toast. The caller says when its command only
 // reads, with `sideEffect: false`. After any other command, whatever its exit code, the serve
 // child is asked to scan again: the screens redraw from the inventory that follows, never from a
-// result the app predicts. The command's outcome and the inventory's freshness are separate
-// states.
+// result the app predicts. The command is over for the app when that inventory is in the store:
+// the control stops being pending, the toast shows and the caller goes on then, so that a dialog
+// that closes and a skill that opens do so in the frame the lists change in.
 import { CLI_COMMANDS } from "#/cli/commands.gen.ts";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LogEvent, ProgressEvent } from "#/cli/events.gen.ts";
@@ -334,7 +335,8 @@ const report = (
 /**
  * Runs `agentx <args> --json` for the control named `options.label`, and returns how it ended
  * so that the caller can follow up. It never rejects: a CLI that could not start is an outcome.
- * A command that only reads (`options.sideEffect` is false) asks for no scan after it.
+ * It resolves once the inventory of the scan that follows the command is in the store. A command
+ * that only reads (`options.sideEffect` is false) asks for no scan, and resolves when it ends.
  */
 export const agentx = async (
   args: readonly string[],
@@ -368,15 +370,11 @@ export const agentx = async (
       startError: String(error),
       timedOut: false,
     };
-  } finally {
-    if (useAppStore.getState().pending[options.label] === started.runId) {
-      setPending(options.label, undefined);
-    }
+  }
+  if (!read) {
+    await refresh();
   }
   keepConflicts(outcome.events);
-  if (!read) {
-    void refresh();
-  }
   report(
     args,
     options,
@@ -389,5 +387,15 @@ export const agentx = async (
   for (const handle of finishedListeners) {
     handle({ ...outcome, args, command: commandOf(args), read });
   }
+  // The caller goes on in the microtask after this function returns. The control is released in
+  // the one after that, so React renders the release and what the caller did, such as closing
+  // its dialog or selecting a skill, in one commit.
+  queueMicrotask(() => {
+    queueMicrotask(() => {
+      if (useAppStore.getState().pending[options.label] === started.runId) {
+        setPending(options.label, undefined);
+      }
+    });
+  });
   return outcome;
 };

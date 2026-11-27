@@ -45,7 +45,7 @@ import type {
   TakenReason,
 } from "#/screens/sources/projection.ts";
 import { loadSkillMd } from "#/store/loaders.ts";
-import { useSettling } from "#/store/settle.ts";
+import { usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { SkillMdRead } from "#/store/store.ts";
 
@@ -324,7 +324,7 @@ const AddedRemove = ({
     addedName(card, s.inventory?.library ?? noLibrary)
   );
   // The Remove dialog's command, as it labels it (`removeLabel`).
-  const busy = useSettling(`remove ${name ?? ""}`);
+  const busy = usePending(`remove ${name ?? ""}`);
   return (
     <RemoveSwap
       status={status}

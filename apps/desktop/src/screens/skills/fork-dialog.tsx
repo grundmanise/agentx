@@ -51,9 +51,8 @@ import {
 import type { ForkFields } from "#/screens/skills/fork.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
-import { stopOnClose, usePending } from "#/store/runner.ts";
+import { agentx, stopOnClose, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** What the CLI said when it refused a fork, and the names its words may start with. */
@@ -118,7 +117,7 @@ export const FORK_WHILE_MERGING = "Can't fork while update in progress";
  * says why; it stays focusable, so the keyboard reaches the Tooltip too.
  */
 export const ForkButton = ({ row }: { row: SkillRow }) => {
-  const pending = useSettling(forkLabel(row));
+  const pending = usePending(forkLabel(row));
   const merging = row.entry?.pending_merge === true;
   const button = (
     <Button
@@ -175,7 +174,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
     }
     setRefusal(undefined);
     const target = forkTarget(row);
-    const outcome = await runUntilSettled(
+    const outcome = await agentx(
       forkArgs(target, renaming ? name : undefined),
       {
         label: forkLabel(row),

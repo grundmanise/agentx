@@ -18,7 +18,7 @@ import { onRunEnd, resolveCli, run } from "#/cli/transport.ts";
 import type { RefreshCompleteEvent, RunResult } from "#/cli/transport.ts";
 import { readChecks } from "#/startup/checks.ts";
 import type { Findings, Problem } from "#/startup/checks.ts";
-import { connect, rescan, startServe } from "#/store/feed.ts";
+import { connect, refresh, startServe } from "#/store/feed.ts";
 import { keepLaunch, restoreLaunch } from "#/store/launch-cache.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { ServeEnd, ServeError } from "#/store/store.ts";
@@ -310,7 +310,7 @@ const sequence = async () => {
       serve: await serveOutcome(
         childId,
         reported,
-        again ? rescan() : undefined
+        again ? refresh() : undefined
       ),
     });
   } finally {

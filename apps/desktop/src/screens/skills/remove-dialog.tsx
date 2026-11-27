@@ -28,7 +28,7 @@ import {
 } from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import type { CommandOptions } from "#/store/runner.ts";
-import { runUntilSettled } from "#/store/settle.ts";
+import { agentx } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of the Remove control for `row`: the runner's name for it. */
@@ -110,11 +110,11 @@ export const RemoveDialog = ({
     const options: CommandOptions = {
       label: removeLabel(row),
       retry: () => {
-        void runUntilSettled(args, options);
+        void agentx(args, options);
       },
       success: `Removed ${row.name} skill`,
     };
-    void runUntilSettled(args, options);
+    void agentx(args, options);
     removed.current = true;
     close();
   };

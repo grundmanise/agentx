@@ -33,7 +33,6 @@ import { skillFile } from "#/screens/skills/edit.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { agentx, stopOnClose, usePending } from "#/store/runner.ts";
-import { afterSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -125,11 +124,7 @@ const CreateSkillForm = ({ onClose }: { onClose: () => void }) => {
       current = false;
     };
   }, []);
-  // Create is pending while `skill new` runs and, once it created the skill, until the inventory
-  // that follows lists it. A refusal changed nothing, so it waits for no inventory.
-  const running = usePending(CREATE_SKILL_LABEL);
-  const [selecting, setSelecting] = useState(false);
-  const pending = running || selecting;
+  const pending = usePending(CREATE_SKILL_LABEL);
   const nameId = useId();
   const nameHintId = useId();
   const descriptionId = useId();
@@ -170,16 +165,11 @@ const CreateSkillForm = ({ onClose }: { onClose: () => void }) => {
       return;
     }
     const created = createdName(outcome.events, name);
-    // The skill is selected from the inventory that follows, never from the command's result, and
-    // with the setting on its SKILL.md opens then, where the library says it is.
-    setSelecting(true);
-    afterSettled(() => {
-      onClose();
-      openSkill(created);
-      if (opens) {
-        editSkill(created);
-      }
-    });
+    onClose();
+    openSkill(created);
+    if (opens) {
+      editSkill(created);
+    }
   };
 
   return (

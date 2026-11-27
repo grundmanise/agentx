@@ -246,6 +246,7 @@ test("a refresh is a JSON-RPC request, whose answer arrives as a refresh_complet
   cli,
   page,
 }) => {
+  cli.answersRefreshes = false;
   await page.evaluate(async () => await window.transport.serveStart());
   await page.evaluate(async () => {
     await window.transport.serveRequest({ request_id: "r1", type: "refresh" });

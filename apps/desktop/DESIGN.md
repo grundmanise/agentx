@@ -821,7 +821,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 
 Each entry gives a component's structure, tokens and states, and the reason for a choice that is not obvious. What a component says, and which command a control runs, is in its code.
 
-A control that runs a command is pending from the command until the inventory that follows it arrives: `aria-busy`, a `Spinner` in or beside it, and no input. It keeps the state the last inventory reported, so the screen never shows the outcome ahead of the CLI.
+A control that runs a command is pending from the command until the inventory that follows it arrives: `aria-busy`, a `Spinner` in or beside it, and no input. It keeps the state the last inventory reported, so the screen never shows the outcome ahead of the CLI. Everything the command ends with shows in the frame that inventory does: the lists change, the control is no longer pending, the toast appears, the dialog closes and the new or renamed skill is selected.
 
 Finder in this file means the platform's file manager. `src/lib/reveal.ts` names it for the platform `src/lib/platform.ts` reads; a screen never checks the platform itself.
 

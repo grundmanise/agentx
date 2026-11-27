@@ -32,7 +32,7 @@ import { publishAll } from "#/screens/skills/publish.ts";
 import { useSkillRows } from "#/screens/skills/rows.ts";
 import { checkUpdates } from "#/screens/skills/updates.ts";
 import { openActivityLog } from "#/store/activity-log.ts";
-import { rescan } from "#/store/feed.ts";
+import { refresh } from "#/store/feed.ts";
 
 export interface PaletteItem extends Tracked {
   /** Names the row among all others: two skills can share a name. */
@@ -61,7 +61,7 @@ const skillsWord = (n: number) => (n === 1 ? "1 skill" : `${n} skills`);
  * or the error the scan failed with.
  */
 const rescanMachine = async () => {
-  const done = await rescan();
+  const done = await refresh();
   if (done === undefined) {
     return;
   }

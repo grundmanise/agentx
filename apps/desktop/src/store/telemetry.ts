@@ -4,7 +4,7 @@
 // `config set telemetry on|off`, and stay pending until the inventory that follows arrives; the
 // app writes no file.
 import type { InventorySettings } from "#/cli/events.gen.ts";
-import { runUntilSettled } from "#/store/settle.ts";
+import { agentx } from "#/store/runner.ts";
 import type { AppState } from "#/store/store.ts";
 
 /** The help center page that lists what is sent. */
@@ -25,7 +25,7 @@ export const liveSettings = (s: AppState): InventorySettings | undefined =>
  * The control stays pending until the inventory that follows it arrives.
  */
 export const setTelemetry = async (on: boolean) => {
-  await runUntilSettled(["config", "set", "telemetry", on ? "on" : "off"], {
+  await agentx(["config", "set", "telemetry", on ? "on" : "off"], {
     label: TELEMETRY_LABEL,
   });
 };

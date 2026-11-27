@@ -149,7 +149,6 @@ test("turning an agent on runs config enable, with no action on the toast", asyn
   await expect(toast).toBeVisible();
   await expect(toast.getByRole("button")).toHaveCount(0);
   await expect.poll(() => cli.serveRequests.length).toBe(1);
-  await expect(toggle).toHaveAttribute("aria-busy", "true");
   await cli.serveEmit([
     {
       ...inventory,
@@ -157,12 +156,6 @@ test("turning an agent on runs config enable, with no action on the toast", asyn
         c.id === "devin" ? { ...c, enabled: true } : c
       ),
       scan_counter: 2,
-    },
-    {
-      ok: true,
-      request_id: cli.requestIds.at(-1) ?? "",
-      scan_counter: 2,
-      type: "refresh_complete",
     },
   ]);
   await expect(toggle).toBeChecked();
@@ -218,12 +211,6 @@ test("choosing Copy on a card runs config placement, the control follows the nex
       ),
       scan_counter: 2,
     },
-    {
-      ok: true,
-      request_id: cli.requestIds.at(-1) ?? "",
-      scan_counter: 2,
-      type: "refresh_complete",
-    },
   ]);
   await expect(copy).toBeChecked();
   await expect(control).not.toHaveAttribute("aria-busy");
@@ -241,15 +228,7 @@ test("choosing Copy on a card runs config placement, the control follows the nex
   });
   await toasts(page).getByRole("button", { name: "Convert existing" }).click();
   await expect.poll(() => cli.serveRequests.length).toBe(2);
-  await cli.serveEmit([
-    { ...inventory, scan_counter: 3 },
-    {
-      ok: true,
-      request_id: cli.requestIds.at(-1) ?? "",
-      scan_counter: 3,
-      type: "refresh_complete",
-    },
-  ]);
+  await cli.serveEmit([{ ...inventory, scan_counter: 3 }]);
   await expect(
     toasts(page).getByText(
       "Converted 2 skills in Cursor to copies. Kept 1 edited copy"
@@ -261,24 +240,15 @@ test("choosing Copy on a card runs config placement, the control follows the nex
   ]);
 });
 
-/** The inventory with `configurations`, with the answer to the last refresh. */
+/** The inventory with `configurations`, as the scan after the last refresh gives it. */
 const answered = (
   cli: MockCli,
   configurations: typeof inventory.configurations
-) => {
-  const scan = cli.requestIds.length + 1;
-  return [
-    { ...inventory, configurations, scan_counter: scan },
-    {
-      ok: true,
-      request_id: cli.requestIds.at(-1) ?? "",
-      scan_counter: scan,
-      type: "refresh_complete" as const,
-    },
-  ];
-};
+) => [
+  { ...inventory, configurations, scan_counter: cli.requestIds.length + 1 },
+];
 
-/** The inventory once the configuration `id` is gone, with the answer to the last refresh. */
+/** The inventory once the configuration `id` is gone. */
 const without = (cli: MockCli, id: string) =>
   answered(
     cli,

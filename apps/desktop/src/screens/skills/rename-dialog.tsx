@@ -31,9 +31,8 @@ import {
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { renameArgs, renameHint } from "#/screens/skills/rename.ts";
-import { stopOnClose } from "#/store/runner.ts";
+import { agentx, stopOnClose, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The label of the Rename control for `row`: the runner's name for it. */
@@ -70,7 +69,7 @@ const refusalOf = (outcome: Outcome): Problem => {
 
 /** Rename, a secondary button in the detail pane's action row of a hub skill. */
 export const RenameButton = ({ row }: { row: SkillRow }) => {
-  const pending = useSettling(renameLabel(row));
+  const pending = usePending(renameLabel(row));
   return (
     <Button
       track="skill-detail.rename"
@@ -93,7 +92,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
   const [name, setName] = useState(row.name);
   const [refusal, setRefusal] = useState<Problem | undefined>();
   // Pending until the inventory that follows the command has arrived, refusal or not.
-  const pending = useSettling(renameLabel(row));
+  const pending = usePending(renameLabel(row));
   const nameRef = useRef<HTMLInputElement>(null);
   const ruleId = useId();
   const ready = isSkillName(name) && name !== row.name;
@@ -106,7 +105,7 @@ const RenameForm = ({ row }: { row: SkillRow }) => {
   // Renames to `to`. Retry, after another command held the lock, runs this again, so a rename that
   // then succeeds closes the dialog and selects the skill as the first try would.
   const rename = async (to: string) => {
-    const outcome = await runUntilSettled(renameArgs(row.name, to), {
+    const outcome = await agentx(renameArgs(row.name, to), {
       keep: [row.name, to],
       label: renameLabel(row),
       ownFailure: true,

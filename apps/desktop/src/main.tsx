@@ -43,7 +43,9 @@ createRoot(root).render(
         void reportError(error);
       }}
     >
-      <HashRouter>
+      {/* A navigation renders at once, not as a transition: the skill a command selects shows in
+          the frame of the inventory that lists it. */}
+      <HashRouter useTransitions={false}>
         <TooltipProvider>
           <App />
         </TooltipProvider>

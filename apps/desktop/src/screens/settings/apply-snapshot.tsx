@@ -22,8 +22,7 @@ import {
   notFetched,
   sourceAddArgs,
 } from "#/screens/settings/transfer.ts";
-import { agentx } from "#/store/runner.ts";
-import { runUntilSettled, settled, useSettling } from "#/store/settle.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 const APPLY_LABEL = "apply snapshot";
@@ -134,7 +133,7 @@ export const ApplySnapshotRow = () => {
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<ApplyResult>();
   const [adding, setAdding] = useState(false);
-  const pending = useSettling(APPLY_LABEL) || adding;
+  const pending = usePending(APPLY_LABEL) || adding;
 
   const pick = async () => {
     const path = await pickSnapshot(library);
@@ -146,19 +145,15 @@ export const ApplySnapshotRow = () => {
 
   /** The apply, then the sources it names that this machine lacks; undefined when it failed. */
   const runApply = async (path: string): Promise<ApplyResult | undefined> => {
-    const outcome = await runUntilSettled(
-      ["snapshot", "apply", path, "--yes"],
-      {
-        label: APPLY_LABEL,
-        success: `Applied snapshot ${fileName(path)}`,
-      }
-    );
+    const outcome = await agentx(["snapshot", "apply", path, "--yes"], {
+      label: APPLY_LABEL,
+      success: `Applied snapshot ${fileName(path)}`,
+    });
     if (outcome.exitCode !== EXIT_CODES.ok) {
       return undefined;
     }
     // The settings name the sources now; which of them this machine has downloaded is what the
     // inventory after the apply lists.
-    await settled();
     const unreachable = await addMissingSources(
       sourcesOf(useAppStore.getState())
     );

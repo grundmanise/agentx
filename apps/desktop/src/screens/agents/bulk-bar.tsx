@@ -8,7 +8,7 @@ import { Spinner } from "#/components/ui/spinner.tsx";
 import { andList, plural } from "#/lib/plural.ts";
 import { removedText, removeFailure } from "#/screens/agents/remove.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 
 /** The runner's name for a command the bar runs. */
 const BULK_LABEL = "selected agents";
@@ -98,34 +98,31 @@ export const BulkBar = ({
   onClear: () => void;
 }) => {
   const [confirming, setConfirming] = useState<Configuration[]>();
-  const busy = useSettling(BULK_LABEL);
+  const busy = usePending(BULK_LABEL);
   const direct = chosen.filter((c) => !c.reads_library);
   const toEnable = direct.filter((c) => !c.enabled);
   const toDisable = direct.filter((c) => c.enabled);
 
   const enable = () => {
-    void runUntilSettled(["config", "enable", ...toEnable.map((c) => c.id)], {
+    void agentx(["config", "enable", ...toEnable.map((c) => c.id)], {
       label: BULK_LABEL,
       success: `${namesOf(toEnable)} enabled`,
     });
     onClear();
   };
   const disable = () => {
-    void runUntilSettled(["config", "disable", ...toDisable.map((c) => c.id)], {
+    void agentx(["config", "disable", ...toDisable.map((c) => c.id)], {
       label: BULK_LABEL,
       success: `${namesOf(toDisable)} disabled. New skills won't go there by default.`,
     });
     onClear();
   };
   const remove = (gone: Configuration[]) => {
-    void runUntilSettled(
-      ["config", "remove", ...gone.map((c) => c.id), "--yes"],
-      {
-        failure: removeFailure,
-        label: BULK_LABEL,
-        success: removedText,
-      }
-    );
+    void agentx(["config", "remove", ...gone.map((c) => c.id), "--yes"], {
+      failure: removeFailure,
+      label: BULK_LABEL,
+      success: removedText,
+    });
     onClear();
   };
 

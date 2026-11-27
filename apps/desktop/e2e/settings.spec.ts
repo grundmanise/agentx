@@ -126,8 +126,6 @@ test("Enter with a new label runs config set label and toasts; the field shows t
   await expect(labelField(page)).toHaveAttribute("aria-busy", "true");
   set.release();
   await expect(toasts(page).getByText("Label saved")).toBeVisible();
-  // The field waits for the inventory after the command, which brings the label.
-  await expect(labelField(page)).toHaveAttribute("aria-busy", "true");
   await scanned(cli, inventoryWith({ label: "work laptop", scanCounter: 2 }));
   await expect(labelField(page)).not.toHaveAttribute("aria-busy");
   await expect(labelField(page)).toHaveValue("work laptop");
@@ -228,7 +226,6 @@ test("the switch runs config set ignore_system_files true, then false, each with
   await expect(
     toasts(page).getByText("System files are ignored")
   ).toBeVisible();
-  await expect(ignoreSwitch(page)).toHaveAttribute("aria-busy", "true");
   await scanned(cli, inventoryWith({ ignore: true, scanCounter: 2 }));
   await expect(ignoreSwitch(page)).toBeChecked();
   await expect(ignoreSwitch(page)).not.toHaveAttribute("aria-busy");

@@ -9,7 +9,7 @@ import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { SettingsCard, SettingsRow } from "#/screens/settings/section.tsx";
-import { useSettling } from "#/store/settle.ts";
+import { usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import {
   TELEMETRY_LABEL,
@@ -19,7 +19,7 @@ import {
 
 const SendUsageData = ({ checked }: { checked: boolean }) => {
   const id = useId();
-  const pending = useSettling(TELEMETRY_LABEL);
+  const pending = usePending(TELEMETRY_LABEL);
   return (
     <SettingsRow
       name={<label htmlFor={id}>Allow anonymous usage data</label>}

@@ -56,18 +56,10 @@ export const inventoryWith = ({
     },
   }) satisfies InlineEvent;
 
-/** Sends the inventory that follows a command and answers every refresh request, as serve does. */
+/** Sends the inventory that follows a command, as serve does. */
 export const scanned = async (
   cli: MockCli,
   inventory: ReturnType<typeof inventoryWith>
 ) => {
-  await cli.serveEmit([
-    inventory,
-    ...cli.requestIds.map((id) => ({
-      ok: true,
-      request_id: id,
-      scan_counter: inventory.scan_counter,
-      type: "refresh_complete" as const,
-    })),
-  ]);
+  await cli.serveEmit([inventory]);
 };

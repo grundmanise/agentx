@@ -164,6 +164,7 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
   cli,
   page,
 }) => {
+  cli.answersRefreshes = false;
   cli.answerOpenDialog(SNAPSHOT);
   cli.register(["snapshot", "apply", SNAPSHOT, "--yes"], { events: imported });
   const hubAdd = cli.register(["source", "add", NEW_HUB, "--hub"], {
@@ -195,9 +196,6 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
   ]);
 
   await confirm.getByRole("button", { name: "Apply" }).click();
-  await expect(toasts(page)).toContainText(
-    "Applied snapshot agentx-snapshot.json"
-  );
   // The inventory after the apply lists the sources the applied settings name, which this machine
   // has not downloaded: none is added before it comes.
   await expect.poll(() => cli.serveRequests.length).toBe(1);
@@ -213,6 +211,10 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
       type: "refresh_complete",
     },
   ]);
+  await expect(toasts(page)).toContainText(
+    "Applied snapshot agentx-snapshot.json"
+  );
+  cli.answersRefreshes = true;
 
   // The sources are added one after another, with no click, and Apply… waits for the last.
   await expect
@@ -232,14 +234,6 @@ test("applies the picked snapshot after its confirm, adds the sources it names w
     "Skipped: notes, drafts",
     `Couldn't reach ${TEAM}`,
   ]);
-  // Apply… waits for the inventory that follows the commands, then is free again.
-  await cli.serveEmit(
-    cli.requestIds.map((id) => ({
-      ok: true,
-      request_id: id,
-      type: "refresh_complete" as const,
-    }))
-  );
   await expect(applyButton).toBeEnabled();
   expect(later(cli)).toEqual([
     ["snapshot", "apply", SNAPSHOT, "--yes", "--json"],
@@ -269,15 +263,6 @@ test("a snapshot that installed, updated and skipped nothing says so", async ({
     })
     .getByRole("button", { name: "Apply" })
     .click();
-  // The result shows once the inventory after the apply has come.
-  await expect.poll(() => cli.serveRequests.length).toBe(1);
-  await cli.serveEmit([
-    {
-      ok: true,
-      request_id: cli.requestIds.at(-1) ?? "",
-      type: "refresh_complete",
-    },
-  ]);
   const result = section.getByRole("region", { name: "Apply result" });
   await expect(result.getByRole("paragraph")).toHaveText([
     "No skills were installed or updated.",
