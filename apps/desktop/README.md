@@ -26,6 +26,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/screens/agents` | The Agents page: `agents-screen.tsx` is the cards and their Enabled switch, `counts.ts` the counts read from the inventory's edges and the library's path |
 | `src/screens/settings` | The Settings page. `settings-screen.tsx` is the title and the ordered list of sections, with a slot for each section still to come; `section.tsx` is the section frame (label, the line under it, content) every section renders. One file per section: `this-machine.tsx` (the label, `config set label`, and the machine id), `hub.tsx` (set, change or detach the hub with `source add <url> --hub` and `source remove <url>`, each change after its warning), `comparing-edits.tsx` (Ignore system files), `storage.tsx` (the paths and the store's size from `machine`) and `command-line.tsx` (the versions and Run checks); `source-rows.ts` is what the hub shows from the Sources slice |
 | `src/assets/logos` | The agent client logos, one SVG per client slug, shown by `src/components/agent-logo.tsx`; a client with none gets a monogram. The app never loads a logo from the network |
+| `container`, `e2e/presets`, `scripts/preset.ts` | The app in a browser against the real serve inside a container, for screenshots and recordings: the image, the `browser` script that runs it, and the machine presets its home is built from. See [Screenshots and recordings in a container](#screenshots-and-recordings-in-a-container) |
 | `e2e/fixtures` | Inline inventories and events shared by several tests, typed by the generated event types |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) and one rule of [`eslint-plugin-better-tailwindcss`](https://github.com/schoero/eslint-plugin-better-tailwindcss) |
 | `src/screens/skills/fork.ts`, `src/screens/skills/fork-dialog.tsx` | Fork on the Skills screen. `fork.ts` says which skills offer Fork, how `skill fork` names one and how the dialog differs per kind of skill; `fork-dialog.tsx` is the Fork button of the action row (`ForkButton`) and the Fork dialog, which `ForkDialogs` in `skills-screen.tsx` shows so that it outlives the pane of the skill forked |
@@ -107,6 +108,23 @@ From the repository root, `make check-desktop` runs what CI runs for the desktop
 `pnpm dev:serve` and `pnpm preview:serve` (`scripts/serve.ts`) build the CLI from `apps/cli` into `node_modules/.cache/agentx`, so you need Go too; set `AGENTX_CLI` to an `agentx` to use that one instead. They start Vite on the first free port from 1430 or 1431, then `agentx serve --json --listen 127.0.0.1:0` with that port's origins, `http://localhost:<port>` and `http://127.0.0.1:<port>`, and read the address and token from its `listening` event. Vite answers `GET /agentx-serve.json` with `{"url", "token"}`, so the bundle holds no token and one build works with any serve. The page reads it on load once the frontend's WebSocket wire is in; until then it uses the Tauri wire. Ctrl-C stops both.
 
 Serve uses your shell's environment, so it serves the agentx home of `HOME`, or `AGENTX_HOME` when set. Only one serve runs per home: while the desktop app or another `dev:serve` is open on it, the command exits with code 6. To run one per worktree, give each its own home, such as `AGENTX_HOME=/tmp/wt2/.agentx pnpm dev:serve`; set `HOME` to a temporary folder too to keep it off your agent folders.
+
+### Screenshots and recordings in a container
+
+`container/browser` runs the app in a browser against the real `agentx serve` inside a Docker container, on a home built from a machine preset, and drives it with [agent-browser](https://agent-browser.dev). It needs only Docker (Docker Desktop, OrbStack or colima on a Mac), and touches nothing on your machine: the container has no network, no host folder and no published port, runs as a user other than root, and gets its own home. Each worktree gets its own image and container, so worktrees run side by side.
+
+```sh
+container/browser up typical                       # build the image from this worktree, build the home, start the app
+container/browser exec agent-browser skills get core   # agent-browser's own guide, for its installed version
+container/browser exec agent-browser open http://localhost:1431
+container/browser exec agent-browser screenshot /tmp/out/skills.png
+container/browser pull                             # copy /tmp/out to .browser/ in the worktree
+container/browser down
+```
+
+`up` builds the image from the worktree as it is, edits included, and starts a fresh home each time, so run it again after a change or to switch presets. The presets are in `e2e/presets`: `empty`, `typical`, `heavy` and `hostile`. `scripts/preset.ts` builds one, and refuses to run outside the container. Behind a TLS-intercepting proxy, `up` builds through `HTTPS_PROXY` and trusts the CA bundle `SSL_CERT_FILE` names.
+
+Use the mocked e2e tests only for a state the real serve cannot reach.
 
 ### The pnpm workspace
 

@@ -1,3 +1,4 @@
 /apps/cli/agentx
 node_modules
 .DS_Store
+.browser

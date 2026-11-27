@@ -123,7 +123,7 @@ Succinctly describe the functional/non-functional requirement, including the bus
 
 Concrete evidence that the change works. Show a before and after. Evidence is required when the change impacts functionality or behavior.
 
-- For a visual change, use screenshots or a recording from the running product. Never describe a visual change in words instead. If you can't capture or attach them, ask for help rather than write a description.
+- For a visual change, use screenshots or a recording from the running product, taken as the `evidence` skill says. Never describe a visual change in words instead. If you can't capture or attach them, ask for help rather than write a description.
 - For an execution-based change, display the relevant console output from before and after the change.
 
 ### Merge danger
