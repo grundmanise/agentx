@@ -7,11 +7,13 @@
 // release, version 0.0.0, finds nothing. Beside panic_reports.rs, this is the one place the Rust side reaches
 // the network.
 
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 /// The manifest stable releases publish: an asset of the latest release.
@@ -159,10 +161,59 @@ pub async fn app_update_install(
 }
 
 /// Quits and opens the app again, so the installed update runs. The exit stops the serve child
-/// first, as quitting does.
+/// first, as quitting does. On macOS the exit then opens the app bundle through LaunchServices,
+/// which brings the new version to the front, as the app was when the user clicked Restart.
 #[tauri::command(rename_all = "snake_case")]
 pub fn app_restart(app: AppHandle) {
-    app.request_restart();
+    let bundle = cfg!(target_os = "macos")
+        .then(std::env::current_exe)
+        .and_then(Result::ok)
+        .and_then(|exe| app_bundle(&exe).map(Path::to_path_buf));
+    match bundle {
+        Some(bundle) => {
+            *app.state::<Relaunch>()
+                .0
+                .lock()
+                .unwrap_or_else(|err| err.into_inner()) = Some(bundle);
+            app.exit(0);
+        }
+        None => app.request_restart(),
+    }
+}
+
+/// The `.app` bundle that holds `exe`, the app's binary in `Contents/MacOS`.
+fn app_bundle(exe: &Path) -> Option<&Path> {
+    let macos = exe.parent()?;
+    let contents = macos.parent()?;
+    let bundle = contents.parent()?;
+    let in_bundle = macos.file_name()? == "MacOS"
+        && contents.file_name()? == "Contents"
+        && bundle.extension()? == "app";
+    in_bundle.then_some(bundle)
+}
+
+/// The app bundle to open once the app has exited, after the user restarted into an update.
+#[derive(Default)]
+pub struct Relaunch(Mutex<Option<PathBuf>>);
+
+/// Opens the app bundle again when a restart asked for it; `-n` starts a new instance while this
+/// one exits. When `open` fails, Tauri's own restart starts the app instead.
+pub fn relaunch(app: &AppHandle) {
+    let bundle = app
+        .state::<Relaunch>()
+        .0
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+        .take();
+    let Some(bundle) = bundle else { return };
+    let opened = Command::new("/usr/bin/open")
+        .arg("-n")
+        .arg(&bundle)
+        .status()
+        .is_ok_and(|status| status.success());
+    if !opened {
+        tauri::process::restart(&app.env());
+    }
 }
 
 #[cfg(test)]
@@ -182,6 +233,19 @@ mod tests {
         assert_eq!(
             manifest_urls("0.3.0-nightly.20261001.42", true),
             vec![STABLE, NIGHTLY]
+        );
+    }
+
+    #[test]
+    fn the_bundle_is_the_app_that_holds_the_binary() {
+        assert_eq!(
+            app_bundle(Path::new("/Applications/agentx.app/Contents/MacOS/agentx")),
+            Some(Path::new("/Applications/agentx.app"))
+        );
+        assert_eq!(app_bundle(Path::new("/repo/target/debug/agentx")), None);
+        assert_eq!(
+            app_bundle(Path::new("/opt/agentx/Contents/MacOS/agentx")),
+            None
         );
     }
 }
