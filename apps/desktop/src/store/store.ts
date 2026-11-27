@@ -90,7 +90,7 @@ export interface AppState {
   pending: Record<string, string>;
   /** The history of each hub skill read so far, by name. */
   histories: Record<string, HistoryRead>;
-  /** The skills of each source listed so far, by source id, from `source skills <id>`. */
+  /** The skills of each source opened so far, by source id, from `source skills <id>`. */
   listings: Record<string, SourceSkillEvent[]>;
   /**
    * Your skills on the hub that this machine has not installed, from

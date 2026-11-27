@@ -29,7 +29,7 @@ export interface SourcePill {
   /** The canonical URL; absent for Hub. */
   url?: string;
   lastFetched?: string;
-  /** How many skills it holds: its listing's length, or your skills on the hub. */
+  /** How many skills it holds, as the inventory counts them. */
   skills?: number;
   /** The entry `source list` gave: the shared source, or the hub for Hub. */
   source: Source;
@@ -64,13 +64,10 @@ const compareAdded = (a: SourcePill, b: SourcePill) =>
   (a.source.added ?? "").localeCompare(b.source.added ?? "");
 
 /**
- * Hub when a hub is set, then one pill per shared source in the order they were added. A shared source's skill count is the length of its listing, once read: `source list`
- * reports none for a shared source.
+ * Hub when a hub is set, then one pill per shared source in the order they were added. A pill's
+ * skill count is the one the inventory gives its source.
  */
-export const sourcePills = (
-  sources: Source[],
-  listings: Readonly<Record<string, readonly unknown[] | undefined>> = {}
-): SourcePill[] => {
+export const sourcePills = (sources: Source[]): SourcePill[] => {
   const shared = sources
     .filter((s) => s.hub !== true)
     .map((s): SourcePill => {
@@ -83,9 +80,8 @@ export const sourcePills = (
       if (s.last_fetched !== undefined) {
         pill.lastFetched = s.last_fetched;
       }
-      const listing = listings[s.id];
-      if (listing !== undefined) {
-        pill.skills = listing.length;
+      if (s.skills !== undefined) {
+        pill.skills = s.skills;
       }
       return pill;
     });

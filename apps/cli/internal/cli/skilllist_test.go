@@ -217,6 +217,8 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 				ran = append(ran, "for-each-ref")
 			case strings.Contains(call, " log --stdin "):
 				ran = append(ran, "log")
+			case strings.Contains(call, " ls-tree "):
+				ran = append(ran, "ls-tree")
 			case strings.HasSuffix(call, "config --path --get core.excludesFile"):
 				ran = append(ran, "config")
 			case inAlpha != "":
@@ -236,8 +238,9 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	count("skill list", calls(), "add add config for-each-ref log read-tree read-tree write-tree write-tree")
 	before := len(calls())
 	inventory := h.inventory(t)
-	// The inventory's sources cost it one for-each-ref more, whatever their number.
-	count("the inventory", calls()[before:], "add add config for-each-ref for-each-ref log read-tree read-tree write-tree write-tree")
+	// The inventory's sources cost it one for-each-ref more, whatever their
+	// number, and one ls-tree per fetched shared source, for its skill count.
+	count("the inventory", calls()[before:], "add add config for-each-ref for-each-ref log ls-tree read-tree read-tree write-tree write-tree")
 	states := map[string]string{}
 	for _, e := range inventory["library"].([]any) {
 		entry := e.(map[string]any)

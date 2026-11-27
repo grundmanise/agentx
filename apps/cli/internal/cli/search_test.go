@@ -118,6 +118,16 @@ func TestServeAnswersSearchFromTheSourceIndex(t *testing.T) {
 		}
 	}
 
+	// The inventory counts each source's skills as a listing does.
+	counts := map[string]any{}
+	for _, src := range inventory["sources"].([]any) {
+		m := src.(map[string]any)
+		counts[m["url"].(string)] = m["skills"]
+	}
+	if want := map[string]any{alpha.url: float64(3), beta.url: float64(2)}; !reflect.DeepEqual(counts, want) {
+		t.Errorf("skills of the inventory's sources = %v, want %v", counts, want)
+	}
+
 	equal(t, "exit", p.close(), 0)
 	equal(t, "result.ok", p.next("result")["ok"], true)
 }

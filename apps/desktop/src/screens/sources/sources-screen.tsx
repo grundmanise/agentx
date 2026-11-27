@@ -7,7 +7,6 @@ import type {
   LibraryEntry,
   SearchResult,
   Source,
-  SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
@@ -54,7 +53,6 @@ import type {
 import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillList } from "#/screens/sources/skill-list.tsx";
 import { SourceRow } from "#/screens/sources/source-row.tsx";
-import { useFetchedListings } from "#/screens/sources/use-fetched-listings.ts";
 import { search } from "#/store/feed.ts";
 import { loadInstallable, loadLabel, loadListing } from "#/store/loaders.ts";
 import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
@@ -75,7 +73,12 @@ const noSelection: Selection = new Map();
 
 /** Loads what a pill shows: a source's listing, or your skills on the hub. */
 const loadPill = async (key: string) => {
-  await (key === HUB_SKILLS ? loadInstallable() : loadListing(key));
+  if (key === HUB_SKILLS) {
+    await loadInstallable();
+    return;
+  }
+  const source = sourcesOf(useAppStore.getState()).find((s) => s.id === key);
+  await loadListing(key, source?.commit);
 };
 
 /** The label of the read that fills a pill, for `usePending`. */
@@ -115,27 +118,28 @@ const useOpenPill = (
 };
 
 /**
- * Loads the open pill when the user did not open it, such as the first one, unless
- * `useFetchedListings` reads its listing: Hub, or a source never fetched.
+ * Loads what the open pill lists: a source's listing, and again when a fetch moves the source to
+ * another commit; Hub's skills when the user did not open it, as when it is the first pill.
  */
-const useLoadUnopened = (pill: SourcePill | undefined, opened?: string) => {
+const useOpenListing = (pill: SourcePill | undefined, opened?: string) => {
   const key = pill?.key;
-  const fetched = pill?.lastFetched;
+  const commit = pill?.source.commit;
   useEffect(() => {
-    if (
-      key !== undefined &&
-      key !== opened &&
-      (key === HUB_SKILLS || fetched === undefined)
-    ) {
+    if (key === undefined) {
+      return;
+    }
+    if (key !== HUB_SKILLS) {
+      void loadListing(key, commit);
+    } else if (key !== opened) {
       void loadPill(key);
     }
-  }, [key, opened, fetched]);
+  }, [key, opened, commit]);
 };
 
 /**
- * Refresh all: one `source fetch --all`, after which the screen reads again the listing of each
- * source `source list` reports a new fetch for. Hub lists your skills from
- * `skill list --remote`, so they are read again too, whenever there is a hub.
+ * Refresh all: one `source fetch --all`. The inventory that follows gives each source's commit
+ * and skill count. Hub lists your skills from `skill list --remote`, so they are read again,
+ * whenever there is a hub.
  */
 const refreshAll = async () => {
   const outcome = await agentx(["source", "fetch", "--all"], {
@@ -148,18 +152,14 @@ const refreshAll = async () => {
 };
 
 /** The pills, with the source Add source just added until the inventory lists it. */
-const usePills = (
-  sources: Source[],
-  listings: Record<string, SourceSkillEvent[]>
-) => {
+const usePills = (sources: Source[]) => {
   const [justAdded, setJustAdded] = useState<Source | undefined>();
   // Once the inventory lists it, the inventory alone says whether it is there.
   if (justAdded !== undefined && sources.some((s) => s.id === justAdded.id)) {
     setJustAdded(undefined);
   }
   const pills = sourcePills(
-    justAdded === undefined ? sources : [...sources, justAdded],
-    listings
+    justAdded === undefined ? sources : [...sources, justAdded]
   );
   return { pills, setJustAdded };
 };
@@ -336,9 +336,7 @@ export const SourcesScreen = () => {
     { autoInvoke: true }
   );
 
-  useFetchedListings(sources);
-
-  const { pills, setJustAdded } = usePills(sources, listings);
+  const { pills, setJustAdded } = usePills(sources);
   // A source removed while open, opened or first, takes its selection with it; the first pill opens.
   const activePill = useOpenPill(pills, active, () => {
     // A late preselection of a source just added must not land on the next one.
@@ -349,7 +347,7 @@ export const SourcesScreen = () => {
     setAllOf((prev) => only(prev, (source) => kept.has(source)));
   });
 
-  useLoadUnopened(activePill, active);
+  useOpenListing(activePill, active);
 
   /** Sets the query; an empty one shows the listing, and the next search starts from it. */
   const changeQuery = (text: string) => {

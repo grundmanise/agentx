@@ -795,17 +795,20 @@ func TestScanListsTheLibrary(t *testing.T) {
 	if got := inventory["machine"].(map[string]any); !reflect.DeepEqual(got, map[string]any(machine)) {
 		t.Errorf("the inventory's machine differs from machine:\ninventory: %v\nmachine:   %v", got, machine)
 	}
-	refs := 0
+	refs, trees := 0, 0
 	for _, call := range calls() {
 		switch {
 		case strings.Contains(call, "for-each-ref"):
 			refs++
+		case strings.Contains(call, " ls-tree "):
+			trees++
 		case strings.Contains(call, "--version"), strings.Contains(call, "rev-parse --is-bare-repository"):
 		default:
 			t.Errorf("scan ran git %s", call)
 		}
 	}
 	equal(t, "for-each-ref calls", refs, 2)
+	equal(t, "ls-tree calls, one per fetched shared source", trees, 1)
 
 	// Without --json nothing prints the library, so a text scan and a text
 	// serve read none of its lineage: the startup gate's --version is the
