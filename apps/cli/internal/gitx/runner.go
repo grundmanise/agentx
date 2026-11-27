@@ -408,7 +408,7 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	}
 	err = cmd.Run()
 	stdout, stderr, readErr := streams.read()
-	if readErr != nil && err == nil {
+	if readErr != nil {
 		return "", 0, fmt.Errorf("git %s: %w", subcommand(args), readErr)
 	}
 	if stderr != "" {

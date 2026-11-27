@@ -49,11 +49,14 @@ func (s *streams) close() {
 	}
 }
 
+// readAll reads f by position: a process git left running shares its
+// offset and may still write.
 func readAll(f *os.File) (string, error) {
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
+	info, err := f.Stat()
+	if err != nil {
 		return "", err
 	}
-	b, err := io.ReadAll(f)
+	b, err := io.ReadAll(io.NewSectionReader(f, 0, info.Size()))
 	return string(b), err
 }
 
