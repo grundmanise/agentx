@@ -24,7 +24,7 @@ const Checkbox = ({ checked, track, ...props }: CheckboxProps) => (
     {...trackAttribute(track)}
     data-slot="checkbox"
     checked={checked}
-    className="rounded-checkbox size-checkbox inline-flex shrink-0 items-center justify-center border-0 bg-transparent p-0 outline-none disabled:cursor-not-allowed disabled:opacity-50"
+    className="rounded-checkbox size-checkbox disabled:bg-checkbox-disabled-bg inline-flex shrink-0 items-center justify-center border-0 bg-transparent p-0 outline-none disabled:cursor-not-allowed disabled:opacity-50"
     {...props}
   >
     <CheckboxPrimitive.Indicator
