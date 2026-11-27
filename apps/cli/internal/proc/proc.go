@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
@@ -91,6 +92,7 @@ func Run(ctx context.Context, c Command, line func(stream string, text []byte)) 
 
 	var res Result
 	ended := make(chan struct{})
+	closed := make(chan struct{})
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
@@ -112,7 +114,7 @@ func Run(ctx context.Context, c Command, line func(stream string, text []byte)) 
 		t := time.NewTimer(grace)
 		defer t.Stop()
 		select {
-		case <-ended:
+		case <-closed:
 		case <-t.C:
 			_ = syscall.Kill(-pid, syscall.SIGKILL)
 		}
@@ -121,10 +123,13 @@ func Run(ctx context.Context, c Command, line func(stream string, text []byte)) 
 	// Wait's error says again what the state says: how the command ended.
 	_ = cmd.Wait()
 	close(ended)
-	<-stopped
 	stdout.end(grace)
 	stderr.end(grace)
 	reading.Wait()
+	if stdout.eof && stderr.eof {
+		close(closed)
+	}
+	<-stopped
 	stdout.lines.flush()
 	stderr.lines.flush()
 
@@ -139,6 +144,7 @@ func Run(ctx context.Context, c Command, line func(stream string, text []byte)) 
 type output struct {
 	r, w  *os.File
 	lines *lines
+	eof   bool // every process that held the pipe closed it
 }
 
 func newOutput(l *lines) (*output, error) {
@@ -168,6 +174,7 @@ func (o *output) read() {
 			o.drain(buf)
 		}
 		if err != nil {
+			o.eof = errors.Is(err, io.EOF)
 			return
 		}
 	}

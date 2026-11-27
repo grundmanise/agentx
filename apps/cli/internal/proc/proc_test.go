@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -152,4 +153,39 @@ func TestRunHandsOverAllTheCommandWroteWhenLineIsSlow(t *testing.T) {
 	if took := time.Since(begun); took > 5*time.Second {
 		t.Fatalf("the run took %v: it waited for the sleep the command left running", took)
 	}
+}
+
+// A stopped command whose shell dies of SIGTERM while a process it started
+// ignores SIGTERM and holds its output: the process is killed once the
+// grace period is over.
+func TestRunKillsWhatTheCommandStartedOnCancel(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	pids := make(chan int, 1)
+	done := make(chan Result, 1)
+	go func() {
+		res, _ := Run(ctx, Command{Path: "/bin/sh", Args: []string{"-c", `sh -c 'trap "" TERM; echo $$; while :; do sleep 0.05; done' & wait`},
+			Grace: 200 * time.Millisecond},
+			func(_ string, text []byte) {
+				if pid, err := strconv.Atoi(string(text)); err == nil {
+					pids <- pid
+				}
+			})
+		done <- res
+	}()
+	pid := <-pids
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	cancel()
+	res := <-done
+	if !res.Cancelled {
+		t.Fatalf("result = %+v, want cancelled", res)
+	}
+	for range 50 {
+		state, _ := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+		if s := strings.TrimSpace(string(state)); s == "" || strings.HasPrefix(s, "Z") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("the process the command started is still running a second after Run returned")
 }
