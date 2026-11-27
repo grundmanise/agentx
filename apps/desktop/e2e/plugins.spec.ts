@@ -354,7 +354,7 @@ test.describe("navigation", () => {
   test("a skill opens in Skills, selected", async ({ cli, page }) => {
     await openPlugins(cli, page);
     // The Skills screen reads the files of the skill it shows, a plugin's by "<plugin>:<name>".
-    cli.register(["skill", "files", "acme-tools:release-check"], {
+    cli.register(["skill", "show", "acme-tools:release-check"], {
       events: filesOf("release-check"),
     });
     await detail(page)

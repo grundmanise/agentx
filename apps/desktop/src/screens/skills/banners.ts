@@ -79,11 +79,11 @@ type Conflicts = Record<string, ConflictEvent>;
 export interface BannerFacts {
   /** The added sources, from `source list`: the hub, and each source's access. */
   sources: Source[];
-  /** How many files `skill diff <name>` reports changed; undefined until it was read. */
+  /** How many files the skill's edits changed, from the pane's read; undefined until it was read. */
   changedFiles?: number;
   /** The store's last `conflict` event of each skill, for the files a pending merge left. */
   conflicts?: Conflicts;
-  /** The paths `skill diff <name> --update` reports for the skill's update; undefined until it was read. */
+  /** The paths the skill's update changes, from the pane's read; undefined until it was read. */
   updateFiles?: string[];
 }
 

@@ -1,14 +1,15 @@
 // Publishing a skill (docs/help-center/cli/skill.mdx, "Publish a skill"): the Publish dialog, the
-// banner buttons that open it, and the toast each outcome of `skill publish` gives. The button
-// reads the changed files as it opens the dialog: `skill diff <name>`, or, for a skill never
-// published, every file `skill files <name>` lists, since the publish sends them all. Publish runs
+// banner buttons that open it, and the toast each outcome of `skill publish` gives. The dialog
+// shows the changed files from the detail pane's read of the skill (`skill show`), so it opens
+// filled: the skill's edits, or, for a skill never published, every file but those git ignores,
+// since the publish sends them all. Publish runs
 // `skill publish <name>`, with `--message <text>` when What changed holds text other than the
 // summary it starts with, which says what the CLI's own message says; the run's progress shows
 // until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
 // toast does not name keeps the runner's error toast, the CLI's message then its hint as one
 // sentence-cased paragraph, the skill's name keeping its case, and the hint in the app's words
 // where the CLI's names a command (`publishFailure` in publish.ts).
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { DiffEvent, ProgressEvent } from "#/cli/events.gen.ts";
@@ -34,7 +35,7 @@ import {
   readOnlyHubReason,
 } from "#/screens/skills/banners.ts";
 import { fileStatusLabels } from "#/screens/skills/files.tsx";
-import { shortSource } from "#/screens/skills/projection.ts";
+import { readVersionOf, shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import {
   alreadyPublished,
@@ -43,16 +44,14 @@ import {
   publishFailure,
   refusedForHub,
 } from "#/screens/skills/publish.ts";
-import { agentx, stopOnClose } from "#/store/runner.ts";
+import { stopOnClose } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
+import type { SkillRead } from "#/store/store.ts";
 
 /** The label of the publish of `name`, for its pending state. */
 export const publishLabel = (name: string) => `publish ${name}`;
-/** The labels of the reads of the files a publish of `name` would send. */
-const filesLabel = (name: string) => `publish files ${name}`;
-const diffLabel = (name: string) => `publish diff ${name}`;
 
 const updateLabel = (name: string) => `update ${name}`;
 
@@ -75,7 +74,7 @@ export const publishArgs = (name: string, message: string, summary = "") => {
     : ["skill", "publish", name, "--message", text];
 };
 
-/** What the CLI's message says a commit does to a file, by its status in `skill diff`. */
+/** What the CLI's message says a commit does to a file, by its status in the `diff` event of the edit. */
 const summaryVerbs: Record<DiffEvent["status"], string> = {
   added: "add",
   deleted: "delete",
@@ -156,8 +155,9 @@ const progressText = (name: string, progress: ProgressEvent | undefined) => {
 };
 
 /**
- * The files a publish sends, read when the dialog opens: the changed files `skill diff <name>`
- * reports, or, with `fresh`, every file of a skill never published, each new to the remote.
+ * The files a publish sends, from the detail pane's read of the skill: its edits, or, with
+ * `fresh`, every file of a skill never published, each new to the remote. `reading` until the
+ * read of this version of the skill is in.
  */
 export type FilesState =
   | { kind: "reading" }
@@ -202,44 +202,36 @@ const ChangedFiles = ({ files }: { files: FilesState }) => {
 };
 
 /**
- * The read of the files a publish would record: `skill diff <name>`, which compares a skill never
- * published with the commit that created it, so a fresh fork reads as unchanged. Such a skill
- * reads every file `skill files <name>` lists but those git ignores, each added.
+ * The files a publish of `row` would record, from `read`, the detail pane's read of it. The edits
+ * of a skill never published compare it with the commit that created it, so a fresh fork reads as
+ * unchanged: such a skill sends every file but those git ignores, each added.
  */
-const readChanged = async (row: SkillRow): Promise<FilesState> => {
-  const { name } = row;
-  if (notPublished(row)) {
-    const outcome = await agentx(["skill", "files", name], {
-      label: filesLabel(name),
-      sideEffect: false,
-    });
-    if (outcome.exitCode !== EXIT_CODES.ok) {
-      return { kind: "failed" };
-    }
-    const diffs = outcome.events.flatMap((e): DiffEvent[] =>
-      e.type === "skill_file" && e.ignored !== true
-        ? [
-            {
-              name,
-              patch: "",
-              path: e.path,
-              schema_version: e.schema_version,
-              status: "added",
-              type: "diff",
-            },
-          ]
-        : []
-    );
-    diffs.sort((a, b) => (a.path < b.path ? -1 : 1));
-    return { diffs, fresh: true, kind: "read" };
+const changedOf = (row: SkillRow, read: SkillRead | undefined): FilesState => {
+  if (read === undefined || read.version !== readVersionOf(row)) {
+    return { kind: "reading" };
   }
-  const outcome = await agentx(["skill", "diff", name], {
-    label: diffLabel(name),
-    sideEffect: false,
-  });
-  return outcome.exitCode === EXIT_CODES.ok
-    ? { diffs: outcome.events.filter((e) => e.type === "diff"), kind: "read" }
-    : { kind: "failed" };
+  if (read.failed === true) {
+    return { kind: "failed" };
+  }
+  if (!notPublished(row)) {
+    return { diffs: read.edits, kind: "read" };
+  }
+  const diffs = read.files.flatMap((file): DiffEvent[] =>
+    file.ignored === true
+      ? []
+      : [
+          {
+            name: row.name,
+            patch: "",
+            path: file.path,
+            schema_version: file.schema_version,
+            status: "added",
+            type: "diff",
+          },
+        ]
+  );
+  diffs.sort((a, b) => (a.path < b.path ? -1 : 1));
+  return { diffs, fresh: true, kind: "read" };
 };
 
 /** The dialog's body, mounted while it is open, so that it starts clean each time. */
@@ -359,10 +351,7 @@ const PublishDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const close = stopOnClose(
-    [publishLabel(row.name), filesLabel(row.name), diffLabel(row.name)],
-    onOpenChange
-  );
+  const close = stopOnClose([publishLabel(row.name)], onOpenChange);
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent>
@@ -391,25 +380,13 @@ export const PublishButton = ({
   label: string;
 }) => {
   const [open, setOpen] = useState(false);
-  const [files, setFiles] = useState<FilesState>({ kind: "reading" });
-  // The read of the latest opening: an earlier one that ends later does not replace it.
-  const opening = useRef(0);
+  const read = useAppStore((s) => s.skillReads[row.key]);
   const pending = useSettling(publishLabel(row.name));
   // A hub skill cannot be published while the hub is read-only; a source's skill shows
   // Publish only while its source is writable.
   const readOnly = useAppStore((s) =>
     row.kind === "hub" ? readOnlyHubReason(sourcesOf(s)) : undefined
   );
-  const openDialog = async () => {
-    opening.current += 1;
-    const mine = opening.current;
-    setFiles({ kind: "reading" });
-    setOpen(true);
-    const read = await readChanged(row);
-    if (opening.current === mine) {
-      setFiles(read);
-    }
-  };
   return (
     <>
       <WithReason reason={readOnly}>
@@ -423,7 +400,7 @@ export const PublishButton = ({
           onClick={
             readOnly === undefined
               ? () => {
-                  void openDialog();
+                  setOpen(true);
                 }
               : undefined
           }
@@ -434,7 +411,7 @@ export const PublishButton = ({
       </WithReason>
       <PublishDialog
         row={row}
-        files={files}
+        files={changedOf(row, read)}
         open={open}
         onOpenChange={setOpen}
       />

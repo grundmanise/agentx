@@ -7,15 +7,14 @@ import { manyAgentsInventory, manyConfigurations } from "./fixtures/agents.ts";
 import {
   adoption,
   deletedWithFrontMatter,
-  fileReads,
   filesOf,
   history,
   inventory,
   meetingNotes,
-  releaseNotesDiffs,
-  reviewDiffs,
+  registerShowReads,
+  showReads,
 } from "./fixtures/skills.ts";
-import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
+import { lettersUpdateDiffs } from "./fixtures/update-diffs.ts";
 import {
   expect,
   keptReads,
@@ -25,6 +24,7 @@ import {
   thisMachine,
 } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
+import { paintedFrames, recordFrames } from "./harness/frames.ts";
 
 const launchLines = [
   ["version", "--json"],
@@ -36,21 +36,12 @@ const isLaunchOrLoad = (line: string[]) =>
     (known) => known.join(" ") === line.join(" ")
   );
 
-/**
- * The command lines the Skills screen ran, but the history reads, which e2e/skills.spec.ts covers,
- * and the reads of what an update changes, which e2e/updates.spec.ts covers.
- */
-const later = (cli: MockCli) =>
-  cli.commands.filter(
-    (l) => !isLaunchOrLoad(l) && l[1] !== "history" && !l.includes("--update")
-  );
+/** The command lines the Skills screen ran. */
+const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunchOrLoad(l));
 
-/** `later`, in a fixed order: the two reads of a modified skill run at once. */
-const sortedLater = (cli: MockCli) => {
-  const lines = later(cli).map((l) => l.join(" "));
-  lines.sort((a, b) => a.localeCompare(b));
-  return lines;
-};
+/** What `skill show` emits for the fixture skill `name`. */
+const showOf = (name: string) =>
+  showReads.find((read) => read.args[0] === name)?.events ?? [];
 
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
 const row = (page: Page, name: string) =>
@@ -95,20 +86,7 @@ const openSkills = async (
 ) => {
   cli.onServeStart({ events: [machine] });
   cli.register(["skill", "import"], { events: adoption });
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  cli.register(["skill", "history", "release-notes"], { events: [] });
-  cli.register(["skill", "history", "draft"], { events: [] });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  cli.register(["skill", "diff", "review"], { events: reviewDiffs });
-  cli.register(["skill", "diff", "release-notes"], {
-    events: releaseNotesDiffs,
-  });
-  // review has an update: its pane reads what the update changes.
-  cli.register(["skill", "diff", "review", "--update"], {
-    events: reviewUpdateDiffs,
-  });
+  registerShowReads(cli);
   await page.goto(path);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
 };
@@ -125,7 +103,7 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
   );
   await expect
     .poll(() => later(cli))
-    .toEqual([["skill", "files", "pdf", "--json"]]);
+    .toEqual([["skill", "show", "pdf", "--json"]]);
   // The meta comes with the files: the SKILL.md row is there while they are read.
   await expect(fileRow(section, "SKILL.md")).toContainText("6 lines");
   expect(await rowNames(section)).toEqual([
@@ -175,61 +153,40 @@ test("an unmodified skill: every file, SKILL.md first and open, the rest by path
   await expect
     .poll(() => later(cli))
     .toEqual([
-      ["skill", "files", "pdf", "--json"],
-      ["skill", "files", "gone", "--json"],
+      ["skill", "show", "pdf", "--json"],
+      ["skill", "show", "gone", "--json"],
     ]);
 });
 
-test("after a relaunch, a skill's files show from the kept read, without reading them again", async ({
-  cli,
-  page,
-}) => {
-  await openSkills(cli, page, "/#/skills/pdf");
-  await expect(fileRow(files(page, "pdf"), "SKILL.md")).toContainText(
-    "6 lines"
-  );
-  // The read is kept once the index in IndexedDB names it.
-  await expect.poll(async () => await keptReads(page)).toContain("files:pdf");
-
-  const before = cli.commands.length;
-  cli.restart();
-  await page.reload();
-  await expect(content(files(page, "pdf"), "SKILL.md")).toContainText(
-    "Use this skill to pdf."
-  );
-  await row(page, "gone").click();
-  await expect(files(page, "gone")).toBeVisible();
-  // Only the skill not read before is read: pdf's files come from the kept read.
-  await expect
-    .poll(() =>
-      cli.commands
-        .slice(before)
-        .filter((l) => l[0] === "skill" && l[1] === "files")
-    )
-    .toEqual([["skill", "files", "gone", "--json"]]);
-});
-
-test("after a relaunch, a kept history shows at once, and the history is read again to replace it", async ({
+test("after a relaunch, the kept read of a skill shows at once, and the skill is read again to replace it", async ({
   cli,
   page,
 }) => {
   await openSkills(cli, page, "/#/skills/pdf-letters");
   const article = pane(page, "pdf-letters");
   await expect(article.getByText("Tighten the examples")).toBeVisible();
+  // The read is kept once the index in IndexedDB names it.
   await expect
     .poll(async () => await keptReads(page))
-    .toContain("history:pdf-letters");
+    .toContain("skill:pdf-letters");
 
   // Another subject for the same version, such as an amended message.
   const [latest, ...rest] = history;
-  const read = cli.register(["skill", "history", "pdf-letters"], {
-    events: [{ ...latest, subject: "Tighten the examples, again" }, ...rest],
+  const read = cli.register(["skill", "show", "pdf-letters"], {
+    events: [
+      ...filesOf("pdf-letters"),
+      { ...latest, subject: "Tighten the examples, again" },
+      ...rest,
+    ],
     holdAfter: 0,
   });
   cli.restart();
   await page.reload();
-  // The kept history shows while the read runs.
+  // The kept files and history show while the read runs.
   await read.started;
+  await expect(content(files(page, "pdf-letters"), "SKILL.md")).toContainText(
+    "Use this skill to pdf-letters."
+  );
   await expect(
     pane(page, "pdf-letters").getByText("Tighten the examples")
   ).toBeVisible();
@@ -237,6 +194,44 @@ test("after a relaunch, a kept history shows at once, and the history is read ag
   await expect(
     pane(page, "pdf-letters").getByText("Tighten the examples, again")
   ).toBeVisible();
+});
+
+test("the files, the history and the banner's text of a selected skill show in one frame", async ({
+  cli,
+  page,
+}) => {
+  // pdf-letters has a newer version from its upstream: its banner lists the files it changes.
+  const candidate = { content_hash: "h-pdf-next", upstream_commit: "8e7d6c5" };
+  await openSkills(cli, page, "/#/skills/pdf", {
+    ...inventory,
+    library: inventory.library.map((e) =>
+      e.name === "pdf-letters" ? { ...e, candidate } : e
+    ),
+  });
+  const read = cli.register(["skill", "show", "pdf-letters"], {
+    events: [...filesOf("pdf-letters"), ...lettersUpdateDiffs, ...history],
+    holdAfter: 0,
+  });
+  await row(page, "pdf-letters").click();
+  await read.started;
+  await expect(
+    content(files(page, "pdf-letters"), "SKILL.md").getByRole("status")
+  ).toHaveText("Reading the files…");
+  await recordFrames(page, [
+    'section[aria-label="Files"] button[aria-label="SKILL.md"]',
+    'section[aria-label="History"]',
+    '[role="note"][aria-label^="New version"]',
+  ]);
+  read.release();
+  await expect(fileRow(files(page, "pdf-letters"), "SKILL.md")).toContainText(
+    "6 lines"
+  );
+  const frames = await paintedFrames(page);
+  expect(frames).toHaveLength(2);
+  expect(frames[0]).toContain("Reading the history…");
+  expect(frames[1]).toContain("SKILL.md6 lines|");
+  expect(frames[1]).toContain("Tighten the examples");
+  expect(frames[1]).toContain("SKILL.md · examples.md");
 });
 
 test("the name, the description and a file's text can be selected and copied", async ({
@@ -274,8 +269,8 @@ test("a modified skill of a source: its edits labelled and tinted, against the v
   await openSkills(cli, page, "/#/skills/review");
   const section = files(page, "review");
   await expect
-    .poll(() => sortedLater(cli))
-    .toEqual(["skill diff review --json", "skill files review --json"]);
+    .poll(() => later(cli))
+    .toEqual([["skill", "show", "review", "--json"]]);
   await expect(fileRow(section, "old.md")).toBeVisible();
   // The deleted file is listed with the others, in path order.
   expect(await rowNames(section)).toEqual([
@@ -324,11 +319,8 @@ test("a modified hub skill compares with what was last published", async ({
     "Use this skill to write release notes from merged changes.",
   ]);
   await expect
-    .poll(() => sortedLater(cli))
-    .toEqual([
-      "skill diff release-notes --json",
-      "skill files release-notes --json",
-    ]);
+    .poll(() => later(cli))
+    .toEqual([["skill", "show", "release-notes", "--json"]]);
 });
 
 test("a plugin's skill is read as <plugin>:<name>, a client's own as --configuration", async ({
@@ -340,15 +332,15 @@ test("a plugin's skill is read as <plugin>:<name>, a client's own as --configura
   await expect(fileRow(section, "SKILL.md")).toBeVisible();
   await expect
     .poll(() => later(cli))
-    .toEqual([["skill", "files", "acme-tools:commit-helper", "--json"]]);
+    .toEqual([["skill", "show", "acme-tools:commit-helper", "--json"]]);
 
   await row(page, "notes").click();
   await expect(fileRow(files(page, "notes"), "SKILL.md")).toBeVisible();
   await expect
     .poll(() => later(cli))
     .toEqual([
-      ["skill", "files", "acme-tools:commit-helper", "--json"],
-      ["skill", "files", "notes", "--configuration", "cursor", "--json"],
+      ["skill", "show", "acme-tools:commit-helper", "--json"],
+      ["skill", "show", "notes", "--configuration", "cursor", "--json"],
     ]);
 });
 
@@ -357,7 +349,7 @@ test("files that cannot be read say so, and are read again on the next selection
   page,
 }) => {
   await openSkills(cli, page, "/#/skills/pdf");
-  const read = cli.register(["skill", "files", "gone"], {
+  const read = cli.register(["skill", "show", "gone"], {
     events: [{ code: "not_found", message: "gone is not here", type: "error" }],
     exitCode: 5,
     holdAfter: 0,
@@ -380,14 +372,14 @@ test("files that cannot be read say so, and are read again on the next selection
   await page.getByRole("button", { name: "Dismiss" }).click();
   await row(page, "pdf").click();
   await row(page, "gone").click();
-  // The failed read stays shown while the files are read again, as a failed history does, so the
-  // text alone does not say the read ran: wait for the command line itself.
+  // The failed read stays shown while the skill is read again, so the text alone does not say the
+  // read ran: wait for the command line itself.
   await expect
     .poll(() => later(cli))
     .toEqual([
-      ["skill", "files", "pdf", "--json"],
-      ["skill", "files", "gone", "--json"],
-      ["skill", "files", "gone", "--json"],
+      ["skill", "show", "pdf", "--json"],
+      ["skill", "show", "gone", "--json"],
+      ["skill", "show", "gone", "--json"],
     ]);
   await expect(files(page, "gone")).toContainText(
     "The files could not be read"
@@ -403,7 +395,7 @@ test("a skill that changes while selected keeps its files until the new ones are
   const skillMd = content(section, "SKILL.md");
   await expect(skillMd).toContainText("Use this skill to pdf.");
   // An update gives pdf a new version, whose files take a moment to read.
-  const read = cli.register(["skill", "files", "pdf"], {
+  const read = cli.register(["skill", "show", "pdf"], {
     events: filesOf("pdf", "Use this skill to read PDF files."),
     holdAfter: 0,
   });
@@ -606,8 +598,8 @@ test("a removed file's line count is the count of the lines its pane shows", asy
   page,
 }) => {
   await openSkills(cli, page, "/#/skills/pdf");
-  cli.register(["skill", "diff", "review"], {
-    events: [...reviewDiffs, deletedWithFrontMatter],
+  cli.register(["skill", "show", "review"], {
+    events: [...showOf("review"), deletedWithFrontMatter],
   });
   await row(page, "review").click();
   const section = files(page, "review");
@@ -621,42 +613,12 @@ test("a removed file's line count is the count of the lines its pane shows", asy
   await expect(deletions.last()).toHaveText("Gone.");
 });
 
-test("a failed read of the edits is read again on the next selection", async ({
-  cli,
-  page,
-}) => {
-  await openSkills(cli, page, "/#/skills/pdf");
-  cli.register(["skill", "diff", "review"], {
-    events: [
-      { code: "refused", message: "review cannot be compared", type: "error" },
-    ],
-    exitCode: 6,
-  });
-  await row(page, "review").click();
-  const section = files(page, "review");
-  // The files show without their edits, and the caption says so.
-  await expect(section).toContainText("The edits could not be read");
-  await expect(fileRow(section, "SKILL.md")).toContainText("7 lines");
-  await page.getByRole("button", { name: "Dismiss" }).click();
-  await row(page, "pdf").click();
-  await row(page, "review").click();
-  await expect
-    .poll(() => sortedLater(cli))
-    .toEqual([
-      "skill diff review --json",
-      "skill diff review --json",
-      "skill files pdf --json",
-      "skill files review --json",
-      "skill files review --json",
-    ]);
-});
-
 test("a skill two clients hold is read and shown from the same copy, by its directory", async ({
   cli,
   page,
 }) => {
   cli.register(
-    ["skill", "files", "meeting-notes", "--configuration", "claude-code"],
+    ["skill", "show", "meeting-notes", "--configuration", "claude-code"],
     { events: filesOf("meeting-notes") }
   );
   await openSkills(cli, page, "/#/skills/skill%3Ah-meeting", {
@@ -671,7 +633,7 @@ test("a skill two clients hold is read and shown from the same copy, by its dire
     .toEqual([
       [
         "skill",
-        "files",
+        "show",
         "meeting-notes",
         "--configuration",
         "claude-code",

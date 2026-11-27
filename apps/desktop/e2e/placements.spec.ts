@@ -10,12 +10,9 @@ import {
 } from "./fixtures/agents.ts";
 import {
   adoption,
-  fileReads,
   filesOf,
-  history,
   linked,
-  releaseNotesDiffs,
-  reviewDiffs,
+  registerShowReads,
 } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
@@ -31,13 +28,10 @@ const isLaunchOrLoad = (line: string[]) =>
     (known) => known.join(" ") === line.join(" ")
   );
 
-/** The reads the detail pane runs on its own when a skill is selected. */
-const detailReads = new Set(["skill history", "skill files", "skill diff"]);
-
 /** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
-    (l) => !(isLaunchOrLoad(l) || detailReads.has(l.slice(0, 2).join(" ")))
+    (l) => !(isLaunchOrLoad(l) || l.slice(0, 2).join(" ") === "skill show")
   );
 
 const toasts = (page: Page) =>
@@ -68,17 +62,7 @@ const openSkill = async (
 ) => {
   cli.onServeStart({ events: [machine] });
   cli.register(["skill", "import"], { events: records });
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  cli.register(["skill", "history", "release-notes"], { events: [] });
-  cli.register(["skill", "history", "draft"], { events: [] });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  cli.register(["skill", "diff", "review"], { events: reviewDiffs });
-  cli.register(["skill", "diff", "release-notes"], {
-    events: releaseNotesDiffs,
-  });
-  cli.register(["skill", "diff", "pdf-letters"], { events: [] });
+  registerShowReads(cli);
   await page.goto(`/#/skills/${encodeURIComponent(key)}`);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect(pane(page, name)).toBeVisible();
@@ -236,7 +220,7 @@ test.describe("chips", () => {
   });
 
   test("locked chips toast the lock reason", async ({ cli, page }) => {
-    cli.register(["skill", "files", "linked", "--configuration", "cursor"], {
+    cli.register(["skill", "show", "linked", "--configuration", "cursor"], {
       events: filesOf("linked"),
     });
     await openSkill(cli, page, "commit-helper", "skill:h-commit", {
@@ -546,7 +530,7 @@ test.describe("banners", () => {
       ],
       physical_id: "skill:h-own-pdf",
     };
-    cli.register(["skill", "files", "pdf", "--configuration", "cursor"], {
+    cli.register(["skill", "show", "pdf", "--configuration", "cursor"], {
       events: filesOf("pdf"),
     });
     await openSkill(cli, page, "pdf", "skill:h-own-pdf", {
@@ -831,7 +815,7 @@ test.describe("Remove", () => {
     cli,
     page,
   }) => {
-    cli.register(["skill", "files", "notes", "--configuration", "cursor"], {
+    cli.register(["skill", "show", "notes", "--configuration", "cursor"], {
       events: filesOf("notes"),
     });
     await openSkill(cli, page, "notes", "skill:h-notes");

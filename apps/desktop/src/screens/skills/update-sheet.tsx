@@ -1,6 +1,7 @@
 // The What's new sheet: what an update changes, file by file, before the user takes it in. It
-// reads `skill diff <name> --update` when it opens and shows one collapsible block per file, its
-// status, its path and the patch in the Code pane with the diff tints. A hub skill takes one update
+// shows the read of the skill the detail pane shows (`skill show`), which it makes itself for a
+// skill not read yet, as one collapsible block per file, its status, its path and the patch in the
+// Code pane with the diff tints. A hub skill takes one update
 // at a time: what another of your machines published, else a newer version from its upstream.
 import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
@@ -22,9 +23,9 @@ import {
 } from "#/components/ui/sheet.tsx";
 import { cn } from "#/lib/utils.ts";
 import { LoadingPane } from "#/screens/skills/files.tsx";
-import { updateKey } from "#/screens/skills/projection.ts";
+import { entryVersionOf } from "#/screens/skills/projection.ts";
 import type { UpdateOffer } from "#/screens/skills/projection.ts";
-import { loadUpdateDiff } from "#/store/loaders.ts";
+import { loadSkill } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
 
 const TITLE = "What's new";
@@ -87,15 +88,15 @@ const Patch = ({ path, patch }: { path: string; patch: string }) => {
 };
 
 /**
- * What the update changes, from `skill diff <name> --update`, one block per file, all open. A
+ * What the update changes, from the read of the skill, one block per file, all open. A
  * block is as high as its lines. When the blocks overflow the sheet, a long patch's block gives up
  * height, down to `file.open-min-height`, and the sheet scrolls past that.
  */
 const Changes = ({ update }: { update: UpdateOffer }) => {
-  const key = updateKey(update);
-  const stored = useAppStore((s) => s.updateDiffs[update.name]);
-  // A read of other versions is not what this update changes.
-  const read = stored?.candidate === key ? stored : undefined;
+  const version = entryVersionOf(update.entry);
+  const stored = useAppStore((s) => s.skillReads[update.name]);
+  // A read of another version of the skill is not what this update changes.
+  const read = stored?.version === version ? stored : undefined;
   // Every block starts open; these are the ones the user closed.
   const [closed, setClosed] = useState<string[]>([]);
   // Patches that come in while the loading panes show cross-fade into them, as in the skill's
@@ -110,8 +111,8 @@ const Changes = ({ update }: { update: UpdateOffer }) => {
   }
 
   useEffect(() => {
-    void loadUpdateDiff(update.name, key);
-  }, [update.name, key]);
+    void loadSkill(update.name, [update.name], version);
+  }, [update.name, version]);
 
   if (read === undefined) {
     return <LoadingPane label={READING} />;
@@ -126,7 +127,7 @@ const Changes = ({ update }: { update: UpdateOffer }) => {
       </div>
     );
   }
-  const { diffs } = read;
+  const { update: diffs } = read;
   if (diffs.length === 0) {
     return <Hint>No changes to show</Hint>;
   }

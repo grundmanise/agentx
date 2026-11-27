@@ -13,9 +13,9 @@ import {
 import {
   ACME,
   adoption,
-  fileReads,
   history,
   inventory,
+  registerShowReads,
 } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
@@ -30,14 +30,11 @@ const filesOf = (page: Page) =>
 const details = (page: Page) =>
   page.getByRole("region", { name: "Skill details" });
 
-/** Starts the app on the fixture machine, with pdf-letters' history and every skill's files. */
+/** Starts the app on the fixture machine, with the read of every skill. */
 const start = (cli: MockCli) => {
   cli.onServeStart({ events: [inventory] });
   cli.register(["skill", "import"], { events: adoption });
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
+  registerShowReads(cli);
 };
 
 /** Opens pdf-letters, a hub skill, and its History sheet. */

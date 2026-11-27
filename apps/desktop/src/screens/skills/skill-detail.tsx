@@ -23,11 +23,11 @@ import { HistorySection } from "#/screens/skills/history.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
 import { removeName } from "#/screens/skills/placements.ts";
 import {
-  filesVersionOf,
   glyphOf,
   glyphTitle,
   originOf,
-  updateKey,
+  readVersionOf,
+  showArgsOf,
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
@@ -35,7 +35,7 @@ import { RenameButton } from "#/screens/skills/rename-dialog.tsx";
 import { canRename } from "#/screens/skills/rename.ts";
 import { SightsNotice } from "#/screens/skills/sights-view.tsx";
 import { sightsOf } from "#/screens/skills/sights.ts";
-import { loadUpdateDiff } from "#/store/loaders.ts";
+import { loadSkill } from "#/store/loaders.ts";
 import { useSettling } from "#/store/settle.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
@@ -143,7 +143,9 @@ const EditButton = ({ row }: { row: SkillRow }) => {
 };
 
 /**
- * The right pane: what the CLI reports about one skill. Header: the title row with the name, origin
+ * The right pane: what the CLI reports about one skill. It makes one read per version of the skill,
+ * `skill show`, for all it shows beyond the inventory: FILES, HISTORY and what the banner says of
+ * the skill's edits and of its update. Header: the title row with the name, origin
  * (unless the banner says where the skill came from), a pill per fork made from it under a new
  * name, which opens that fork, and at its right end the action row (Edit for a skill the user may
  * write to, Fork for a skill of a source or a plugin's, Rename for a hub skill, Remove for a
@@ -171,33 +173,31 @@ export const SkillDetail = ({
   const [removing, setRemoving] = useState<"button" | "universal">("button");
   const [removeOpen, setRemoveOpen] = useState(false);
   const sources = useAppStore(sourcesOf);
-  // How many files `skill diff` found changed, from the FILES read of this version of the skill.
-  const changedFiles = useAppStore((s) => {
-    const read = s.files[row.key];
-    return read?.failed === undefined && read?.version === filesVersionOf(row)
-      ? read.diffs?.length
-      : undefined;
-  });
   const conflicts = useAppStore((s) => s.conflicts);
-  // The files the update changes, from `skill diff <name> --update` of this update.
-  const update = row.update === undefined ? undefined : updateKey(row.update);
-  const updateDiffs = useAppStore((s) => {
-    const read = s.updateDiffs[row.name];
-    return read?.candidate === update ? read?.diffs : undefined;
-  });
+  // The pane's read: this version's, or, while that is read, the one of the version before, which
+  // FILES and HISTORY keep showing until this version's replaces it.
+  const version = readVersionOf(row);
+  const read = useAppStore((s) => s.skillReads[row.key]);
   useEffect(() => {
-    if (update !== undefined) {
-      void loadUpdateDiff(row.name, update);
+    const args = showArgsOf(row);
+    if (args !== undefined) {
+      void loadSkill(row.key, args, version);
     }
-  }, [row.name, update]);
+  }, [row, version]);
+  // The banner says of the edits and of the update only what this version's read says.
+  const current =
+    read?.failed === undefined && read?.version === version ? read : undefined;
   const banner = bannerFor(row, configurations, {
-    changedFiles,
+    changedFiles:
+      current === undefined || current.edits.length === 0
+        ? undefined
+        : current.edits.length,
     conflicts,
     sources,
     updateFiles:
-      updateDiffs === undefined
+      current === undefined
         ? undefined
-        : [...new Set(updateDiffs.map((d) => d.path))],
+        : [...new Set(current.update.map((d) => d.path))],
   });
   const details = detailsOf(row, configurations);
   const sights = sightsOf(row, sameName, configurations);
@@ -296,6 +296,7 @@ export const SkillDetail = ({
       )}
       <FilesSection
         row={row}
+        read={read}
         configurations={configurations}
         heading={<Caption>Files</Caption>}
       />
@@ -319,7 +320,7 @@ export const SkillDetail = ({
         {row.kind === "hub" && (
           <section aria-label="History" className="flex flex-col gap-3">
             <Caption>History</Caption>
-            <HistorySection row={row} />
+            <HistorySection row={row} read={read} />
           </section>
         )}
       </div>

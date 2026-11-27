@@ -188,18 +188,6 @@ export const updateVersions = (update: UpdateOffer): string => {
   return `${base === undefined ? shortId(commit ?? "") : formatDate(base)} → ${newer}`;
 };
 
-/**
- * What names the versions of an update, for the read of what it changes: the base version, which a
- * hub update can move under an update from upstream, and the newer one. A read of another one is
- * not this update's.
- */
-export const updateKey = (update: UpdateOffer) =>
-  [
-    update.entry.base_hash ?? "",
-    update.hub?.commit ?? "",
-    update.upstream?.upstream_commit ?? "",
-  ].join(":");
-
 /** The tool an adoption record names, as the product calls it. */
 export const toolName = (adoption: AdoptionEvent): string => {
   switch (adoption.tool) {
@@ -352,7 +340,7 @@ export const directoryName = (path: string) =>
 
 /**
  * The one occurrence a plugin's skill or a skill a client holds on its own is read and shown
- * from, so that `skill files` and Show in Finder meet the same copy: among the user-scope
+ * from, so that `skill show` and Show in Finder meet the same copy: among the user-scope
  * occurrences, a plugin's for a plugin's skill, in the CLI's order (configuration, then path),
  * a real directory first. Undefined when there is none.
  */
@@ -682,25 +670,16 @@ export const glyphOf = (row: SkillRow): Glyph => {
   return row.kind === "hub" ? "fork" : "dot";
 };
 
-/** The reads that show a skill's files; see FilesRequest in src/store/loaders.ts. */
-export interface FilesRequest {
-  args: string[];
-  diff?: string;
-}
-
 /**
- * How `skill files` names a skill, and whether `skill diff` is read for it: a library skill by its
- * name, a plugin's as `<plugin>:<directory>`, and a skill a client holds in its own skills
- * directory, which is neither, by its directory with `--configuration`. The CLI finds a plugin's
- * or a configuration's skill by its directory's name, not the name its frontmatter gives, so the
- * occurrence `occurrenceOf` chooses names it. Only a modified skill of a source or a hub
- * skill with edits not published has a diff. Undefined when the CLI has no way to name it.
+ * How `skill show` names a skill, the arguments after it: a library skill by its name, a plugin's
+ * as `<plugin>:<directory>`, and a skill a client holds in its own skills directory, which is
+ * neither, by its directory with `--configuration`. The CLI finds a plugin's or a configuration's
+ * skill by its directory's name, not the name its frontmatter gives, so the occurrence
+ * `occurrenceOf` chooses names it. Undefined when the CLI has no way to name it.
  */
-export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
+export const showArgsOf = (row: SkillRow): string[] | undefined => {
   if (row.entry !== undefined && row.kind !== "plugin") {
-    return row.modified && row.kind !== "disk"
-      ? { args: [row.name], diff: row.name }
-      : { args: [row.name] };
+    return [row.name];
   }
   const occurrence = occurrenceOf(row);
   if (occurrence === undefined) {
@@ -708,9 +687,9 @@ export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
   }
   const directory = directoryName(occurrence.path);
   if (row.kind === "plugin") {
-    return { args: [`${occurrence.plugin ?? ""}:${directory}`] };
+    return [`${occurrence.plugin ?? ""}:${directory}`];
   }
-  return { args: [directory, "--configuration", occurrence.configuration] };
+  return [directory, "--configuration", occurrence.configuration];
 };
 
 /** One place a skill is on disk, which Finder can open. */
@@ -847,12 +826,23 @@ export const locationsOf = (
 };
 
 /**
- * The version a skill's files are read for: a new read when its content, its state or the base its
- * edits are compared with changed.
+ * The version of a library skill that `skill show` is read for, from what the inventory says of
+ * it: a new read when its content, its kind, its state, its drift, the base its edits are
+ * compared with or the update it is offered changed.
  */
-export const filesVersionOf = (row: SkillRow) =>
+export const entryVersionOf = (entry: LibraryEntry) =>
   [
-    row.entry?.content_hash ?? row.node?.content_hash ?? "",
-    row.entry?.state ?? "",
-    row.entry?.base_hash ?? "",
+    entry.content_hash,
+    entry.kind,
+    entry.state ?? "",
+    entry.base_hash ?? "",
+    (entry.drift ?? []).join(","),
+    entry.hub_ahead?.commit ?? "",
+    entry.candidate?.upstream_commit ?? "",
   ].join(":");
+
+/** The version of a skill that `skill show` is read for: a library skill's, else its content. */
+export const readVersionOf = (row: SkillRow) =>
+  row.entry === undefined
+    ? (row.node?.content_hash ?? "")
+    : entryVersionOf(row.entry);

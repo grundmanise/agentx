@@ -15,7 +15,8 @@ import type {
 } from "#/cli/events.gen.ts";
 
 import { configuration } from "../harness/cli.ts";
-import type { InlineEvent } from "../harness/cli.ts";
+import type { InlineEvent, MockCli } from "../harness/cli.ts";
+import { reviewUpdateDiffs } from "./update-diffs.ts";
 
 export const ACME = "https://github.com/acme/skills";
 export const ZETA = "https://gitlab.com/zeta/tools.git";
@@ -361,8 +362,7 @@ export const history: HistoryEvent[] = [
   ),
 ];
 
-// The files of each skill, as `skill files` reads them, and the edits of the modified skills, as
-// `skill diff` reports them. Every skill has a SKILL.md, a nested file, a binary file and a file
+// The files of each skill and the edits of the modified skills, as `skill show` emits them. Every skill has a SKILL.md, a nested file, a binary file and a file
 // over the size limit; the modified skill of a source also has a file it added.
 
 const skillFile = (
@@ -504,30 +504,43 @@ export const releaseNotesDiffs: DiffEvent[] = [
   ),
 ];
 
-/** One `skill files` read: the arguments after `skill files`, and the events it answers with. */
-export interface FilesRead {
+/** One `skill show` read: the arguments after `skill show`, and the events it answers with. */
+export interface ShowRead {
   args: string[];
-  events: SkillFileEvent[];
+  events: InlineEvent[];
 }
 
-/** The `skill files` read of every skill of the inventory, as the app names each one. */
-export const fileReads: FilesRead[] = [
+/**
+ * The `skill show` read of every skill of the inventory, as the app names each one: its files,
+ * then the edits of a modified skill, what review's update changes and the history of pdf-letters.
+ */
+export const showReads: ShowRead[] = [
   { args: ["draft"], events: filesOf("draft") },
   { args: ["gone"], events: filesOf("gone") },
   { args: ["pdf"], events: filesOf("pdf") },
-  { args: ["pdf-letters"], events: filesOf("pdf-letters") },
+  {
+    args: ["pdf-letters"],
+    events: [...filesOf("pdf-letters"), ...history],
+  },
   {
     args: ["release-notes"],
-    events: filesOf(
-      "release-notes",
-      "Use this skill to write release notes from merged changes."
-    ),
+    events: [
+      ...filesOf(
+        "release-notes",
+        "Use this skill to write release notes from merged changes."
+      ),
+      ...releaseNotesDiffs,
+    ],
   },
   {
     args: ["review"],
-    events: filesOf("review", reviewProse, [
-      textFile("review", "notes.md", "My own notes.\n"),
-    ]),
+    events: [
+      ...filesOf("review", reviewProse, [
+        textFile("review", "notes.md", "My own notes.\n"),
+      ]),
+      ...reviewDiffs,
+      ...reviewUpdateDiffs,
+    ],
   },
   { args: ["scratch"], events: filesOf("scratch") },
   {
@@ -539,6 +552,13 @@ export const fileReads: FilesRead[] = [
     events: filesOf("notes"),
   },
 ];
+
+/** Answers the `skill show` read of every skill of the inventory with `reads`. */
+export const registerShowReads = (cli: MockCli, reads = showReads) => {
+  for (const read of reads) {
+    cli.register(["skill", "show", ...read.args], { events: read.events });
+  }
+};
 
 /**
  * A deleted Markdown file with front matter: its `---` lines read `----` in the patch, which a

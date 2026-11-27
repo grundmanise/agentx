@@ -132,12 +132,9 @@ export const launch = (
   const listed = variant === "no-hub" ? [acme] : [options.hub ?? hub, acme];
   cli.onServeStart({ events: [inventoryOf(entries, listed)] });
   for (const entry of entries) {
-    cli.register(["skill", "history", entry.name], { events: [] });
-    cli.register(["skill", "files", entry.name], {
+    cli.register(["skill", "show", entry.name], {
       events: filesOf(entry.name),
     });
-    cli.register(["skill", "diff", entry.name], { events: [] });
-    cli.register(["skill", "diff", entry.name, "--update"], { events: [] });
   }
   // What the Add skills screen reads when it opens: your skills on the hub and the source's.
   cli.register(["skill", "list", "--remote"], { events: [] });

@@ -1,5 +1,5 @@
-// What `skill diff <name> --update` emits for the updates of e2e/fixtures/updates.ts: one `diff`
-// event per file the update changes, sorted by path, each with the patch git wrote.
+// What `skill show <name>` emits of the updates of e2e/fixtures/updates.ts: one `diff` event that
+// says `update` per file the update changes, sorted by path, each with the patch git wrote.
 import type { InlineEvent } from "../harness/cli.ts";
 
 /** The newer version of pdf from its source: SKILL.md edited, a script added. */
@@ -25,6 +25,7 @@ export const pdfUpdateDiffs: InlineEvent[] = [
     path: "SKILL.md",
     status: "modified",
     type: "diff",
+    update: true,
   },
   {
     name: "pdf",
@@ -42,6 +43,7 @@ export const pdfUpdateDiffs: InlineEvent[] = [
     path: "scripts/convert.py",
     status: "added",
     type: "diff",
+    update: true,
   },
 ];
 
@@ -66,6 +68,7 @@ export const lettersUpdateDiffs: InlineEvent[] = [
     status: "modified",
     step: "upstream",
     type: "diff",
+    update: true,
   },
   {
     name: "pdf-letters",
@@ -84,6 +87,7 @@ export const lettersUpdateDiffs: InlineEvent[] = [
     status: "deleted",
     step: "upstream",
     type: "diff",
+    update: true,
   },
 ];
 
@@ -104,6 +108,7 @@ export const reviewUpdateDiffs: InlineEvent[] = [
     path: "SKILL.md",
     status: "modified",
     type: "diff",
+    update: true,
   },
 ];
 
@@ -126,6 +131,7 @@ export const releaseNotesUpdateDiffs: InlineEvent[] = [
     status: "added",
     step: "hub",
     type: "diff",
+    update: true,
   },
 ];
 
@@ -137,7 +143,7 @@ export const lettersHubDiffs: InlineEvent[] = releaseNotesUpdateDiffs.map(
   (d) => ({ ...d, name: "pdf-letters" })
 );
 
-/** The `skill diff <name> --update` read of every update of e2e/fixtures/updates.ts, by name. */
+/** What every update of e2e/fixtures/updates.ts changes, by name. */
 export const updateDiffsOf: Record<string, InlineEvent[]> = {
   draft: [],
   pdf: pdfUpdateDiffs,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import type {
@@ -22,16 +22,10 @@ import { DropdownMenuItem } from "#/components/ui/dropdown-menu.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { revealInFinder, showInLabel } from "#/lib/reveal.ts";
 import { cn } from "#/lib/utils.ts";
-import { useKeptRead } from "#/screens/skills/kept-read.ts";
-import {
-  filesRequestOf,
-  filesVersionOf,
-  locationsOf,
-} from "#/screens/skills/projection.ts";
+import { locationsOf, showArgsOf } from "#/screens/skills/projection.ts";
 import type { SkillLocation, SkillRow } from "#/screens/skills/projection.ts";
-import { loadFiles } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
-import type { FilesRead } from "#/store/store.ts";
+import type { SkillRead } from "#/store/store.ts";
 
 const SKILL_MD = "SKILL.md";
 
@@ -55,7 +49,7 @@ interface FileRow {
   diff?: DiffEvent;
 }
 
-/** What a changed file's row says beside its path, by its status in `skill diff`. */
+/** What a changed file's row says beside its path, by its status in the `diff` event of the edit. */
 export const fileStatusLabels: Record<DiffEvent["status"], string> = {
   added: "added",
   deleted: "removed",
@@ -79,12 +73,12 @@ const metaOf = (row: FileRow) => {
 };
 
 /** SKILL.md first, then every other path in the CLI's order, the deleted files among them. */
-const rowsOf = (read: FilesRead & { failed?: undefined }): FileRow[] => {
+const rowsOf = (read: SkillRead & { failed?: undefined }): FileRow[] => {
   const byPath = new Map<string, FileRow>();
   for (const file of read.files) {
     byPath.set(file.path, { file, path: file.path });
   }
-  for (const diff of read.diffs ?? []) {
+  for (const diff of read.edits) {
     const row = byPath.get(diff.path);
     if (row === undefined) {
       if (diff.status === "deleted") {
@@ -429,56 +423,50 @@ const Reading = ({
 );
 
 /**
- * FILES in the detail pane: every file of the skill from `skill files`, read when the skill is
- * selected, as an accordion with SKILL.md first and open. For a modified skill, `skill diff
- * <name>` says which files were edited, added or removed since the version it is compared with,
- * and each pane shows the edits tinted. `heading` is the section's caption.
+ * FILES in the detail pane: every file of the skill from the pane's read, `read`, as an accordion
+ * with SKILL.md first and open. The read's edits say which files were edited, added or removed
+ * since the version the skill is compared with, and each pane shows the edits tinted. `heading` is
+ * the section's caption.
  */
 export const FilesSection = ({
   row,
+  read,
   configurations,
   heading,
 }: {
   row: SkillRow;
+  /** The pane's read of the skill; undefined until a first one is in. */
+  read: SkillRead | undefined;
   /** The configurations, which name the places a skill is in. */
   configurations: Configuration[];
   heading: ReactNode;
 }) => {
-  const request = filesRequestOf(row);
-  const version = filesVersionOf(row);
   const library = useAppStore((s) => s.inventory?.machine.library);
   const locations = locationsOf(row, configurations, library);
-  const read = useAppStore((s) => s.files[row.key]);
   const [open, setOpen] = useState<string[]>([SKILL_MD]);
   // The file whose places menu is open, whose row keeps its control shown.
   const [menuOf, setMenuOf] = useState<string | undefined>();
 
-  useEffect(() => {
-    const wanted = filesRequestOf(row);
-    if (wanted !== undefined) {
-      void loadFiles(row.key, wanted, version);
-    }
-  }, [row, version]);
-
   // Files that come in while the loading pane shows cross-fade into it; files read before stay
-  // until the new ones replace them.
+  // until the new ones replace them. Set while rendering, from the read the last render showed.
+  const [shown, setShown] = useState(read);
   const [revealing, setRevealing] = useState(false);
-  const current = useKeptRead(
-    read !== undefined && read.version === version ? read : undefined,
-    (first) => {
-      setRevealing(first.failed !== true);
+  if (read !== shown) {
+    setShown(read);
+    if (shown === undefined && read?.failed !== true) {
+      setRevealing(true);
     }
-  );
+  }
 
   let body: ReactNode;
-  if (request === undefined) {
+  if (showArgsOf(row) === undefined) {
     body = <Hint>No files to show</Hint>;
-  } else if (current === undefined) {
+  } else if (read === undefined) {
     body = <Reading open={open} onOpenChange={setOpen} />;
-  } else if (current.failed === true) {
+  } else if (read.failed === true) {
     body = <Hint>The files could not be read</Hint>;
   } else {
-    const rows = rowsOf(current);
+    const rows = rowsOf(read);
     body =
       rows.length === 0 ? (
         <Hint>No files</Hint>
@@ -550,14 +538,7 @@ export const FilesSection = ({
 
   return (
     <section aria-label="Files" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline gap-3">
-        {heading}
-        {current?.failed === undefined && current?.diffFailed === true && (
-          <span className="type-technical-sm text-text-caption">
-            The edits could not be read
-          </span>
-        )}
-      </div>
+      {heading}
       {body}
     </section>
   );

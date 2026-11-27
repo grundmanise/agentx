@@ -154,7 +154,7 @@ const veil = (page: Page) =>
   page.getByRole("main").locator("> [data-launch-veil]");
 
 /**
- * Launches with one hub skill, waits until its inventory and its files are kept for the next
+ * Launches with one hub skill, waits until its inventory and its read are kept for the next
  * launch, then restarts the app with `doctor` held. Returns the held doctor and the command lines of the
  * restart, the reads of the skill included.
  */
@@ -168,8 +168,7 @@ const relaunch = async (cli: MockCli, page: Page, more: string[] = []) => {
     ],
   });
   for (const n of ["notes", ...more]) {
-    cli.register(["skill", "files", n], { events: filesOf(n) });
-    cli.register(["skill", "history", n], { events: [] });
+    cli.register(["skill", "show", n], { events: filesOf(n) });
   }
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
@@ -180,8 +179,8 @@ const relaunch = async (cli: MockCli, page: Page, more: string[] = []) => {
         await page.evaluate(() => localStorage.getItem("agentx.launch"))
     )
     .not.toBeNull();
-  // The files read is kept in IndexedDB apart from the inventory, and after it shows.
-  await expect.poll(async () => await keptReads(page)).toContain("files:notes");
+  // The skill's read is kept in IndexedDB apart from the inventory, and after it shows.
+  await expect.poll(async () => await keptReads(page)).toContain("skill:notes");
 
   const before = cli.commands.length;
   const held = cli.register(["doctor"], {
@@ -199,8 +198,12 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
   page,
 }) => {
   const { commands, doctor } = await relaunch(cli, page);
-  // The skill is there while the checks run, and none of its reads ran.
+  // The skill is there while the checks run, with its files from the read the first launch kept,
+  // and none of its reads ran.
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Files" })).toContainText(
+    "Use this skill to notes."
+  );
   await expect(veil(page)).toBeVisible();
   await expect(veil(page).getByRole("status")).toContainText(
     "Starting the app…"
@@ -225,12 +228,12 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await expect
     .poll(() => commands())
-    .toEqual(expect.arrayContaining(loadLines));
-  // The skill's files show from the read the first launch kept.
-  await expect(page.getByRole("region", { name: "Files" })).toContainText(
-    "Use this skill to notes."
-  );
-  expect(commands()).not.toContainEqual(["skill", "files", "notes", "--json"]);
+    .toEqual(
+      expect.arrayContaining([
+        ...loadLines,
+        ["skill", "show", "notes", "--json"],
+      ])
+    );
   expect(cli.serveStarts).toBe(2);
 });
 
@@ -272,8 +275,7 @@ test("a later launch whose check fails shows the layer, and Retry brings the scr
 test("a machine with no skills and no agents passes", async ({ cli, page }) => {
   cli.onServeStart({ events: [firstInventory([])] });
   // Skills, the first screen, reads the skill it selects.
-  cli.register(["skill", "files", "notes"], { events: filesOf("notes") });
-  cli.register(["skill", "history", "notes"], { events: [] });
+  cli.register(["skill", "show", "notes"], { events: filesOf("notes") });
   await page.goto("/");
   await expect(skills(page)).toBeVisible();
   await launched(cli);
@@ -498,8 +500,7 @@ test("Run checks shows every check in a dialog over the screen, until Done", asy
     ],
   });
   // Skills, the first screen, reads the skill it selects.
-  cli.register(["skill", "files", "notes"], { events: filesOf("notes") });
-  cli.register(["skill", "history", "notes"], { events: [] });
+  cli.register(["skill", "show", "notes"], { events: filesOf("notes") });
   await page.goto("/");
   await expect(skills(page)).toBeVisible();
   await launched(cli);

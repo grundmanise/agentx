@@ -88,6 +88,9 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
     remote: false,
   },
   "skill rename": {},
+  "skill show": {
+    configuration: true,
+  },
   "skill update": {
     abort: false,
     all: false,

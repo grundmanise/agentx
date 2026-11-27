@@ -10,7 +10,7 @@ import {
   manyAgentsInventory,
   manyConfigurations,
 } from "./fixtures/agents.ts";
-import { adoption, fileReads, history } from "./fixtures/skills.ts";
+import { adoption, registerShowReads } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -504,12 +504,8 @@ test("a count opens its screen filtered to that agent, without selecting the car
   cli,
   page,
 }) => {
-  // The Skills screen selects its first skill and reads its files and history.
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  cli.register(["skill", "history", "draft"], { events: [] });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
+  // The Skills screen selects its first skill and reads it.
+  registerShowReads(cli);
   await openAgents(cli, page);
   const sidebar = page.getByRole("navigation", { name: "Main" });
   const agentsChip = page

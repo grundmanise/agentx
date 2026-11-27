@@ -4,8 +4,7 @@
 // macOS.
 import type { Page } from "@playwright/test";
 
-import { adoption, fileReads, inventory } from "./fixtures/skills.ts";
-import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
+import { adoption, inventory, registerShowReads } from "./fixtures/skills.ts";
 import { expect, libraryPath, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -20,16 +19,6 @@ const actions = (page: Page, name: string) =>
 const editButton = (page: Page, name: string) =>
   actions(page, name).getByRole("button", { exact: true, name: "Edit" });
 
-const libraryNames = [
-  "draft",
-  "gone",
-  "pdf",
-  "pdf-letters",
-  "release-notes",
-  "review",
-  "scratch",
-];
-
 /** Opens a skill: a library skill by its name, any other by its row's key. */
 const openSkill = async (
   cli: MockCli,
@@ -39,17 +28,7 @@ const openSkill = async (
 ) => {
   cli.onServeStart({ events: [inventory] });
   cli.register(["skill", "import"], { events: adoption });
-  for (const n of libraryNames) {
-    cli.register(["skill", "history", n], { events: [] });
-    cli.register(["skill", "diff", n], { events: [] });
-  }
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  // review has an update: its pane reads what the update changes.
-  cli.register(["skill", "diff", "review", "--update"], {
-    events: reviewUpdateDiffs,
-  });
+  registerShowReads(cli);
   await page.goto(`/#/skills/${encodeURIComponent(key)}`);
   await expect(pane(page, name)).toBeVisible();
 };

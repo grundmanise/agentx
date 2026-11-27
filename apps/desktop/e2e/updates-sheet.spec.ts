@@ -1,5 +1,5 @@
-// The What's new sheet: See changes on an update's banner opens it with what
-// `skill diff <name> --update` read when the skill was selected, one block per changed file with
+// The What's new sheet: See changes on an update's banner opens it with what the read of the
+// selected skill, `skill show <name>`, says its update changes, one block per changed file with
 // its status, its path and the patch with the diff tints. A hub skill takes one update at a time:
 // what another machine published comes before a newer version from upstream. Escape and Close
 // close it.
@@ -7,12 +7,7 @@ import type { Page } from "@playwright/test";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 
-import {
-  fileReads,
-  history,
-  releaseNotesDiffs,
-  reviewDiffs,
-} from "./fixtures/skills.ts";
+import { registerShowReads, showReads } from "./fixtures/skills.ts";
 import {
   lettersHubDiffs,
   lettersUpdateDiffs,
@@ -23,9 +18,20 @@ import { inventoryOf, updatesLibrary } from "./fixtures/updates.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { MockCli, Reply } from "./harness/cli.ts";
 
-/** The reads of what an update changes, in the order the sheet ran them. */
-const updateDiffs = (cli: MockCli) =>
-  cli.commands.filter((l) => l[1] === "diff" && l.includes("--update"));
+/** The reads of a skill, in the order the app ran them. */
+const shows = (cli: MockCli) => cli.commands.filter((l) => l[1] === "show");
+
+/** What `skill show` emits for the fixture skill `name` but what its update changes. */
+const withoutUpdate = (name: string) =>
+  (showReads.find((read) => read.args[0] === name)?.events ?? []).filter(
+    (e) => !(e.type === "diff" && e.update === true)
+  );
+
+/** The reply of `skill show <name>` whose update changes what `update` holds, or fails as it does. */
+const showReply = (name: string, update: Reply): Reply => ({
+  ...update,
+  events: [...withoutUpdate(name), ...(update.events ?? [])],
+});
 
 const pane = (page: Page, name: string) =>
   page
@@ -43,7 +49,7 @@ const patch = (page: Page, path: string) =>
 
 /**
  * Opens the Skills screen on `name`, with serve's first inventory offering every update of
- * `library`, and `diff` as what `skill diff <name> --update` answers. Returns that read.
+ * `library`, and `diff` as what the read of `name` says its update changes. Returns that read.
  */
 const open = async (
   cli: MockCli,
@@ -53,28 +59,18 @@ const open = async (
   library = updatesLibrary
 ) => {
   cli.onServeStart({ events: [inventoryOf(library)] });
+  registerShowReads(cli);
   const reading = cli.register(
-    ["skill", "diff", name, "--update"],
-    diff ?? { events: updateDiffsOf[name] }
+    ["skill", "show", name],
+    showReply(name, diff ?? { events: updateDiffsOf[name] })
   );
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  cli.register(["skill", "history", "release-notes"], { events: [] });
-  cli.register(["skill", "history", "draft"], { events: [] });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  cli.register(["skill", "diff", "review"], { events: reviewDiffs });
-  cli.register(["skill", "diff", "release-notes"], {
-    events: releaseNotesDiffs,
-  });
-  cli.register(["skill", "diff", "pdf-letters"], { events: [] });
   await page.goto(`/#/skills/${encodeURIComponent(name)}`);
   await expect(pane(page, name)).toBeVisible();
   return reading;
 };
 
 test.describe("the What's new sheet", () => {
-  test("See changes records skill diff --update and shows one block per file with its patch", async ({
+  test("See changes shows what the skill's read says its update changes, one block per file with its patch", async ({
     cli,
     page,
   }) => {
@@ -96,9 +92,7 @@ test.describe("the What's new sheet", () => {
     read.release();
 
     await expect(block(page, "scripts/convert.py")).toBeVisible();
-    expect(updateDiffs(cli)).toEqual([
-      ["skill", "diff", "pdf", "--update", "--json"],
-    ]);
+    expect(shows(cli)).toEqual([["skill", "show", "pdf", "--json"]]);
     // One block per file, in the CLI's order, each with its status, every one open.
     const rows = await sheet(page)
       .getByRole("button", { expanded: true })
@@ -156,7 +150,7 @@ test.describe("the What's new sheet", () => {
     await expect(sheet(page)).toHaveCount(0);
     await seeChanges(page, "pdf").click();
     await expect(patch(page, "scripts/convert.py")).toBeVisible();
-    expect(updateDiffs(cli)).toHaveLength(1);
+    expect(shows(cli)).toHaveLength(1);
     // Close closes it too.
     await sheet(page)
       .getByRole("button", { exact: true, name: "Close" })
@@ -184,6 +178,7 @@ test.describe("the What's new sheet", () => {
           path: "SKILL.md",
           status: "modified",
           type: "diff",
+          update: true,
         },
       ],
     });
@@ -232,9 +227,7 @@ test.describe("the What's new sheet", () => {
     await expect(
       patch(page, "examples.md").locator("del", { hasText: "# Examples" })
     ).toBeVisible();
-    expect(updateDiffs(cli)).toEqual([
-      ["skill", "diff", "pdf-letters", "--update", "--json"],
-    ]);
+    expect(shows(cli)).toEqual([["skill", "show", "pdf-letters", "--json"]]);
   });
 
   test("shows what another machine published to the hub, with its patch", async ({
@@ -250,9 +243,7 @@ test.describe("the What's new sheet", () => {
     await expect(
       patch(page, "template.md").locator("ins", { hasText: "# Release notes" })
     ).toBeVisible();
-    expect(updateDiffs(cli)).toEqual([
-      ["skill", "diff", "release-notes", "--update", "--json"],
-    ]);
+    expect(shows(cli)).toEqual([["skill", "show", "release-notes", "--json"]]);
     await page.keyboard.press("Escape");
     await expect(sheet(page)).toHaveCount(0);
   });
@@ -290,9 +281,10 @@ test.describe("the What's new sheet", () => {
 
     // The hub update took in a newer version of the original, and the same candidate stays: its
     // update now changes SKILL.md alone.
-    cli.register(["skill", "diff", "pdf-letters", "--update"], {
-      events: lettersUpdateDiffs.slice(0, 1),
-    });
+    cli.register(
+      ["skill", "show", "pdf-letters"],
+      showReply("pdf-letters", { events: lettersUpdateDiffs.slice(0, 1) })
+    );
     const moved = updatesLibrary.map((entry) =>
       entry.name === "pdf-letters"
         ? {
@@ -306,7 +298,7 @@ test.describe("the What's new sheet", () => {
     await seeChanges(page, "pdf-letters").click();
     await expect(block(page, "SKILL.md")).toBeVisible();
     await expect(block(page, "examples.md")).toHaveCount(0);
-    expect(updateDiffs(cli)).toHaveLength(2);
+    expect(shows(cli)).toHaveLength(2);
   });
 
   test("says when the changes could not be read, in the sheet", async ({

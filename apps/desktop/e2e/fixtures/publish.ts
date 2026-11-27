@@ -111,7 +111,7 @@ const diff = (
   type: "diff",
 });
 
-/** What `skill diff <name>` reports for each skill: the files changed since its base. */
+/** The edits of each skill: the files changed since its base. */
 export const diffs: Record<string, DiffEvent[]> = {
   changelog: [
     diff("changelog", "SKILL.md", "modified"),
@@ -126,8 +126,8 @@ export const diffs: Record<string, DiffEvent[]> = {
   ],
 };
 
-/** The `skill files` read of every skill. */
-export const fileReads = library.map((entry) => ({
+/** The `skill show` read of every skill: its files, then its edits. */
+export const showReads = library.map((entry) => ({
   args: [entry.name],
-  events: filesOf(entry.name),
+  events: [...filesOf(entry.name), ...(diffs[entry.name] ?? [])],
 }));

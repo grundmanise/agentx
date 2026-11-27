@@ -88,8 +88,6 @@ export interface AppState {
   adoption: AdoptionEvent[];
   /** The controls whose command runs: label → run id. */
   pending: Record<string, string>;
-  /** The history of each hub skill read so far, by name. */
-  histories: Record<string, HistoryRead>;
   /** The skills of each source listed so far, by source id, from `source skills <id>`. */
   listings: Record<string, SourceSkillEvent[]>;
   /**
@@ -97,8 +95,12 @@ export interface AppState {
    * `skill list --remote`; undefined until read.
    */
   installable: InstallableSkillEvent[] | undefined;
-  /** The files of each skill read so far, by the row's key. */
-  files: Record<string, FilesRead>;
+  /**
+   * What `skill show` read of each skill so far, by the row's key: its files, its unpublished
+   * edits, what its update changes and its history. The detail pane reads a skill when it is
+   * selected; the Publish dialog and the What's new sheet show the same read.
+   */
+  skillReads: Record<string, SkillRead>;
   /**
    * The SKILL.md of each skill of a source read so far, by the Sources card's key, from
    * `source read`: a row of the Sources list reads it when it opens.
@@ -109,11 +111,6 @@ export interface AppState {
    * one-shot's inventory, which is not applied. Replaced by the next check; gone on a restart.
    */
   handshakeFailures: HandshakeFailure[];
-  /**
-   * What each update changes, read so far, by skill name, from `skill diff <name> --update`:
-   * the What's new sheet reads it when it opens.
-   */
-  updateDiffs: Record<string, UpdateDiffRead>;
   /**
    * The last `conflict` event of each skill, by name, from the commands the runner ran this
    * session: which files a pending merge left to resolve. Gone on a restart, when a skill with a
@@ -131,28 +128,21 @@ export interface HandshakeFailure {
 }
 
 /**
- * One read of `skill history <name>`, kept with the version of the skill it was read for, so
- * that a change to the skill never shows the entries of the version before it.
+ * One read of `skill show` for a skill, kept with the version of the skill it was read for. It
+ * stays while a later version is read, and that read replaces it in one write, so every section
+ * that shows it changes at once. `edits` are the files edited since the version the skill is
+ * compared with, and `update` what its update changes: the `diff` events that say `update`.
  */
-export type HistoryRead =
-  | { version: string; entries: HistoryEvent[]; failed?: undefined }
-  | { version: string; entries?: undefined; failed: true };
-
-/**
- * One read of `skill files` for a skill, kept with the version of the skill it was read for, as a
- * HistoryRead is. For a modified skill it also holds the `diff` events of `skill diff <name>`,
- * the files edited since the version the skill is compared with; `diffFailed` when that read
- * failed while the files were read.
- */
-export type FilesRead =
+export type SkillRead =
   | {
       version: string;
       files: SkillFileEvent[];
-      diffs?: DiffEvent[];
-      diffFailed?: boolean;
+      edits: DiffEvent[];
+      update: DiffEvent[];
+      history: HistoryEvent[];
       failed?: undefined;
     }
-  | { version: string; files?: undefined; failed: true };
+  | { version: string; files?: undefined; failed: true; problem: Problem };
 
 /**
  * One read of `source read` for a skill of a source, kept with the version it was read for, its
@@ -163,22 +153,12 @@ export type SkillMdRead =
   | { version: string; file: SkillFileEvent; failed?: undefined }
   | { version: string; file?: undefined; failed: true };
 
-/**
- * One read of `skill diff <name> --update`, kept with the update candidate it was read for, so
- * that a newer update never shows the changes of the one before it.
- */
-export type UpdateDiffRead =
-  | { candidate: string; diffs: DiffEvent[]; failed?: undefined }
-  | { candidate: string; diffs?: undefined; failed: true; problem: Problem };
-
 export const useAppStore = create<AppState>()(() => ({
   adoption: [],
   applied: undefined,
   conflicts: {},
-  files: {},
   freshness: { kind: "stale" },
   handshakeFailures: [],
-  histories: {},
   installable: undefined,
   inventory: undefined,
   lastChecked: undefined,
@@ -188,9 +168,9 @@ export const useAppStore = create<AppState>()(() => ({
   serveEnd: undefined,
   serveError: undefined,
   skillMds: {},
+  skillReads: {},
   store: undefined,
   telemetryAnswered: false,
-  updateDiffs: {},
 }));
 
 const noSources: Source[] = [];

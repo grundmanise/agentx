@@ -9,15 +9,11 @@ import { manyAgentsInventory, manyConfigurations } from "./fixtures/agents.ts";
 import {
   adoption,
   configurations,
-  fileReads,
   filesOf,
-  history,
   inventory,
-  releaseNotesDiffs,
-  reviewDiffs,
+  registerShowReads,
   ACME,
 } from "./fixtures/skills.ts";
-import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
 import { settled } from "./harness/animations.ts";
 import {
   configuration,
@@ -83,21 +79,7 @@ const openSkills = async (
 ) => {
   cli.onServeStart({ events: [machine] });
   cli.register(["skill", "import"], { events: adoption });
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  cli.register(["skill", "history", "release-notes"], { events: [] });
-  cli.register(["skill", "history", "draft"], { events: [] });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  cli.register(["skill", "diff", "review"], { events: reviewDiffs });
-  cli.register(["skill", "diff", "release-notes"], {
-    events: releaseNotesDiffs,
-  });
-  // review has an update: its pane reads what the update changes.
-  cli.register(["skill", "diff", "review", "--update"], {
-    events: reviewUpdateDiffs,
-  });
-  cli.register(["skill", "diff", "pdf-letters"], { events: [] });
+  registerShowReads(cli);
   await page.goto(path);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect(row(page, "pdf")).toBeVisible();
@@ -111,10 +93,6 @@ const expandPlugins = async (page: Page) => {
   await page.getByRole("button", { name: "Collapse all" }).click();
   await page.getByRole("button", { name: "Expand all" }).click();
 };
-
-/** The command lines the screen itself ran, but the reads of a skill's files and edits. */
-const notFiles = (cli: MockCli) =>
-  later(cli).filter((l) => !["files", "diff"].includes(l[1] ?? ""));
 
 test.describe("the list", () => {
   test("groups every skill by where it comes from, in order and with counts", async ({
@@ -351,7 +329,7 @@ test.describe("the list", () => {
         },
       ],
     });
-    cli.register(["skill", "files", "scratch"], { events: filesOf("scratch") });
+    cli.register(["skill", "show", "scratch"], { events: filesOf("scratch") });
     await page.goto("/#/skills");
     await expect(row(page, "scratch")).toBeVisible();
     const logos = row(page, "scratch").getByRole("img");
@@ -741,9 +719,7 @@ test.describe("the detail pane", () => {
     await openSkills(cli, page, "/#/skills/pdf-letters");
     const article = pane(page, "pdf-letters");
     await expect(article.getByRole("list", { name: "History" })).toBeVisible();
-    expect(notFiles(cli)).toEqual([
-      ["skill", "history", "pdf-letters", "--json"],
-    ]);
+    expect(later(cli)).toEqual([["skill", "show", "pdf-letters", "--json"]]);
     await expect(article).toMatchAriaSnapshot(`
       - article "pdf-letters":
         - text: Hub skill · Enabled
@@ -869,16 +845,17 @@ test.describe("the detail pane", () => {
     await long.click();
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
-    // The history was read once: selecting the skill again does not read it again.
+    // The skill was read once: selecting it again does not read it again.
     await row(page, "pdf").click();
     await row(page, "pdf-letters").click();
     await expect(article.getByRole("list", { name: "History" })).toBeVisible();
-    expect(notFiles(cli)).toEqual([
-      ["skill", "history", "pdf-letters", "--json"],
+    expect(later(cli)).toEqual([
+      ["skill", "show", "pdf-letters", "--json"],
+      ["skill", "show", "pdf", "--json"],
     ]);
 
-    // The skill changes and its history cannot be read: the pane says so.
-    cli.register(["skill", "history", "pdf-letters"], { exitCode: 1 });
+    // The skill changes and it cannot be read: the pane says so.
+    cli.register(["skill", "show", "pdf-letters"], { exitCode: 1 });
     await cli.serveEmit([
       {
         ...inventory,
@@ -891,9 +868,10 @@ test.describe("the detail pane", () => {
     await expect(
       article.getByText("The history could not be read")
     ).toBeVisible();
-    expect(notFiles(cli)).toEqual([
-      ["skill", "history", "pdf-letters", "--json"],
-      ["skill", "history", "pdf-letters", "--json"],
+    expect(later(cli)).toEqual([
+      ["skill", "show", "pdf-letters", "--json"],
+      ["skill", "show", "pdf", "--json"],
+      ["skill", "show", "pdf-letters", "--json"],
     ]);
   });
 
@@ -979,9 +957,8 @@ test.describe("the detail pane", () => {
   }) => {
     cli.onServeStart({ events: [inventory] });
     cli.register(["skill", "import"], { events: adoption });
-    cli.register(["skill", "history", "draft"], { events: [] });
     for (const name of ["gone", "draft", "scratch"]) {
-      cli.register(["skill", "files", name], { events: filesOf(name) });
+      cli.register(["skill", "show", name], { events: filesOf(name) });
     }
     await page.goto("/#/skills/gone");
     const titleRow = pane(page, "gone").locator("header");
@@ -1034,7 +1011,7 @@ test.describe("the detail pane", () => {
         },
       ],
     });
-    cli.register(["skill", "files", "gone"], { events: filesOf("gone") });
+    cli.register(["skill", "show", "gone"], { events: filesOf("gone") });
     await page.goto("/#/skills/gone");
     await expect(pane(page, "gone").getByRole("note")).toHaveCount(1);
     await expect(
@@ -1049,21 +1026,16 @@ test.describe("the detail pane", () => {
 
 /** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
 const ran = (cli: MockCli) =>
-  later(cli).filter(
-    (l) =>
-      !["skill files", "skill diff", "skill history"].includes(
-        l.slice(0, 2).join(" ")
-      )
-  );
+  later(cli).filter((l) => l.slice(0, 2).join(" ") !== "skill show");
 
 /** Opens the Skills screen with `key` selected, on the machine with a skill to adopt, one whose source was removed and one the CLI refuses to adopt. */
 const openStates = async (cli: MockCli, page: Page, key: string) => {
   cli.onServeStart({ events: [statesInventory] });
   cli.register(["skill", "import"], { events: statesAdoption });
   for (const name of ["scratch", "lint", "gone"]) {
-    cli.register(["skill", "files", name], { events: filesOf(name) });
+    cli.register(["skill", "show", name], { events: filesOf(name) });
   }
-  cli.register(["skill", "files", "notes", "--configuration", "cursor"], {
+  cli.register(["skill", "show", "notes", "--configuration", "cursor"], {
     events: filesOf("notes"),
   });
   await page.goto(`/#/skills/${key}`);
