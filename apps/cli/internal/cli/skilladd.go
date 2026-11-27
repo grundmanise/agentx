@@ -1059,57 +1059,9 @@ type installed struct {
 // journal exists, recovery needs the commits they hold.
 func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, versions []*imported, targets []placeTarget, asCopy bool) (dones []*installed, journaled bool, err error) {
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		if err := os.MkdirAll(inv.dirs.Library, 0o755); err != nil {
-			return libraryFailure(inv.dirs.Library, err)
-		}
-		sweepStaged(inv.dirs.Library)
-		for _, t := range targets {
-			if !t.atLibrary {
-				sweepStaged(t.dir)
-			}
-		}
-		records, err := inv.listLineage(ctx, gitDir)
-		if err != nil {
-			return storeFailure(err)
-		}
-		// The copy modes the settings record decide what each placement is,
-		// so they are read before any is planned, and the run's own copies
-		// go into the same write.
-		edit, err := inv.beginSettings()
-		if err != nil {
-			return err
-		}
-		m := home.NewMutation(inv.dirs.Home)
-		for _, v := range versions {
-			done, f, err := inv.stageSkill(m, gitDir, v, records, edit.placing(targets), asCopy, edit.copiesOf(v.name))
-			switch {
-			case err != nil:
-				m.Discard()
-				return err
-			case f != nil:
-				b.drop(v.name, stepsPerSkill-2, f) // the blobs and the import already ended
-				continue
-			}
-			dones = append(dones, done)
-		}
-		if len(dones) == 0 {
-			m.Discard()                // nothing live changed and no journal exists
-			return errNothingInstalled // and nothing changed, so nothing is signalled either
-		}
-		if err := inv.stageCopyMode(m, edit, dones); err != nil {
-			m.Discard()
-			return err
-		}
-		// After the apply, not before it: a journal that could not be
-		// written leaves nothing for recovery to need, and calling it
-		// journaled would keep this run's staging refs in the store
-		// for good.
-		applied := m.Apply(inv.refs(ctx))
-		journaled = m.Journaled()
-		if applied == nil {
-			inv.recordInstalls(enteredLibrary(dones, records), nil)
-		}
-		return applied
+		var err error
+		dones, journaled, err = inv.installLocked(ctx, b, gitDir, versions, targets, asCopy)
+		return err
 	})
 	if errors.Is(err, errNothingInstalled) {
 		return nil, false, nil // every skill was refused; the caller answers for them
@@ -1119,6 +1071,61 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 	}
 	b.done = dones
 	return dones, journaled, nil
+}
+
+// installLocked is the mutation of install, under the lock its caller
+// took. A run whose every skill was refused is errNothingInstalled.
+func (inv *invocation) installLocked(ctx context.Context, b *batch, gitDir string, versions []*imported, targets []placeTarget, asCopy bool) (dones []*installed, journaled bool, err error) {
+	if err := os.MkdirAll(inv.dirs.Library, 0o755); err != nil {
+		return nil, false, libraryFailure(inv.dirs.Library, err)
+	}
+	sweepStaged(inv.dirs.Library)
+	for _, t := range targets {
+		if !t.atLibrary {
+			sweepStaged(t.dir)
+		}
+	}
+	records, err := inv.listLineage(ctx, gitDir)
+	if err != nil {
+		return nil, false, storeFailure(err)
+	}
+	// The copy modes the settings record decide what each placement is,
+	// so they are read before any is planned, and the run's own copies
+	// go into the same write.
+	edit, err := inv.beginSettings()
+	if err != nil {
+		return nil, false, err
+	}
+	m := home.NewMutation(inv.dirs.Home)
+	for _, v := range versions {
+		done, f, err := inv.stageSkill(m, gitDir, v, records, edit.placing(targets), asCopy, edit.copiesOf(v.name))
+		switch {
+		case err != nil:
+			m.Discard()
+			return nil, false, err
+		case f != nil:
+			b.drop(v.name, stepsPerSkill-2, f) // the blobs and the import already ended
+			continue
+		}
+		dones = append(dones, done)
+	}
+	if len(dones) == 0 {
+		m.Discard()                            // nothing live changed and no journal exists
+		return nil, false, errNothingInstalled // and nothing changed, so nothing is signalled either
+	}
+	if err := inv.stageCopyMode(m, edit, dones); err != nil {
+		m.Discard()
+		return nil, false, err
+	}
+	// After the apply, not before it: a journal that could not be
+	// written leaves nothing for recovery to need, and calling it
+	// journaled would keep this run's staging refs in the store
+	// for good.
+	applied := m.Apply(inv.refs(ctx))
+	if applied == nil {
+		inv.recordInstalls(enteredLibrary(dones, records), nil)
+	}
+	return dones, m.Journaled(), applied
 }
 
 // enteredLibrary is the skills of dones that entered the library with the
@@ -1453,6 +1460,12 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 	if err != nil {
 		return err
 	}
+	return inv.reportInstalledIn(ctx, b, inventory, dones)
+}
+
+// reportInstalledIn is the report of reportInstalled against a rescan its
+// caller ran.
+func (inv *invocation) reportInstalledIn(ctx context.Context, b *batch, inventory scan.Inventory, dones []*installed) error {
 	b.step(phaseRescan, "")
 	s, err := inv.loadSettings()
 	if err != nil {

@@ -1,7 +1,7 @@
 // The Skills fixture's machine with more skills other tools installed: three the Skills CLI added
 // (the Skills fixture's scratch among them), two Skillshare added, and one the CLI refuses to
-// adopt. Its adoption preview, the `skill import --from <tool> --all` runs the adopt dialog is
-// tested against, and the machine as each run leaves it.
+// adopt. Its adoption preview, the `skill import --all` runs the adopt dialog is tested against,
+// of one tool and of both, and the machine as each run leaves it.
 import type {
   AdoptionEvent,
   LibraryEntry,
@@ -131,6 +131,9 @@ const legacyRecord: AdoptionEvent = {
   type: "adoption",
 };
 
+/** Why a run that does not find the Skills CLI's skill `name` in the source fails it. */
+const goneReason = (name: string) => `${VERCEL} holds no skill at ${name} now`;
+
 /** The warning a run of every skill logs for legacy, which it cannot adopt. */
 const legacyWarning = `legacy could not be imported: ${legacyReason}`;
 
@@ -230,31 +233,66 @@ export const skillsCliWarnings = [
 ];
 
 /**
- * `skill import --from skills-cli --all`, which adopts all three of the Skills CLI's skills and
- * exits 0: the record the preview refuses is a skill it cannot adopt, which it logs as a warning.
+ * `skill import --from skills-cli --from skillshare --all`, one run over both tools: it adds both
+ * sources and adopts every skill but `gone`, the ones the Skills CLI's source no longer holds. The
+ * sources and the skills come in name order, whichever tool installed them: each source's fetch,
+ * then the `blobs` step of its skills, then every `import` step, every `install` step and the one
+ * rescan. The record the preview refuses is a skill it cannot adopt, which it logs as a warning
+ * and fails nothing; a skill that is gone fails the run, which exits 5.
  */
-export const skillsCliAllRun: InlineEvent[] = [
-  ...progressOf([VERCEL], skillsCliNames),
-  ...skillsCliNames.map((name): InlineEvent => ({
-    name,
-    type: "library_skill",
-  })),
-  record(MOVED, "vercel", "adopted"),
-  record("deck-outline", "vercel", "adopted"),
-  legacyRecord,
-  record("scratch", "vercel", "adopted"),
-  {
-    ok: true,
-    summary: "imported 3 skills; 1 could not be imported",
-    type: "result",
-  },
+export const bothToolsRun = (gone: string[] = []): InlineEvent[] => {
+  const vercel = ["commit-style", "deck-outline", "scratch"].filter(
+    (name) => !gone.includes(name)
+  );
+  const names = [...skillshareNames, ...vercel];
+  const total = 2 + 3 * names.length + 1;
+  const steps: [ProgressPhase, string | undefined][] = [
+    ["fetch", TEAM],
+    ...skillshareNames.map((name): [ProgressPhase, string] => ["blobs", name]),
+    ["fetch", VERCEL],
+    ...vercel.map((name): [ProgressPhase, string] => ["blobs", name]),
+    ...names.map((name): [ProgressPhase, string] => ["import", name]),
+    ...names.map((name): [ProgressPhase, string] => ["install", name]),
+    ["rescan", undefined],
+  ];
+  const adoption = (name: string, tool: AdoptionEvent["tool"]) =>
+    gone.includes(name)
+      ? record(name, tool, "refused", goneReason(name))
+      : record(name, tool, "adopted");
+  const ended: InlineEvent =
+    gone.length === 0
+      ? {
+          ok: true,
+          summary: `imported ${names.length} skills; 1 could not be imported`,
+          type: "result",
+        }
+      : {
+          hint: movedHint,
+          message: `${gone.length} of ${names.length + gone.length} skills could not be imported: ${gone
+            .map((name) => `${name}: ${goneReason(name)}`)
+            .join("; ")}`,
+          type: "error",
+        };
+  return [
+    ...steps.map(([phase, subject], i) =>
+      progress(phase, subject, i + 1, total)
+    ),
+    ...names.map((name): InlineEvent => ({ name, type: "library_skill" })),
+    adoption("api-docs", "skillshare"),
+    adoption("commit-style", "vercel"),
+    adoption("deck-outline", "vercel"),
+    adoption("frontend__ui", "skillshare"),
+    legacyRecord,
+    adoption("scratch", "vercel"),
+    ended,
+  ];
+};
+
+/** The warnings that run logs: each skill it failed to adopt, then the one it cannot adopt. */
+export const bothToolsWarnings = (gone: string[] = []) => [
+  ...gone.map((name) => `${name}: ${goneReason(name)}`),
+  legacyWarning,
 ];
-
-/** The warning that run logs. */
-export const skillsCliAllWarnings = [legacyWarning];
-
-/** Why a run that finds none of the Skills CLI's skills in the source fails `name`. */
-const goneReason = (name: string) => `${VERCEL} holds no skill at ${name} now`;
 
 /**
  * `skill import --from skills-cli --all` on a machine where the source holds none of the three: it

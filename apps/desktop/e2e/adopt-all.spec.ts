@@ -1,18 +1,17 @@
 // Adopting another tool's skills all at once: the Adopt skills section of Settings and the
 // Unmanaged group's Import all, both opening the adopt dialog. The dialog lists the skills before
-// the run (the ones the preview refuses marked, with the reason), runs
-// `skill import --from <tool> --all` for each tool in turn with each row's state and one progress
-// line, then shows each row's result and a summary. A run that fails as a whole says why in the
-// dialog.
+// the run (the ones the preview refuses marked, with the reason), runs one `skill import --all`
+// with a `--from` for each tool it covers, with each row's state and one progress line, then shows
+// each row's result and a summary. A run that fails as a whole says why in the dialog.
 import type { Locator, Page } from "@playwright/test";
 
 import {
+  bothToolsRun,
+  bothToolsWarnings,
   inventoryWith,
   MOVED,
   nothingToAdopt,
   previewWith,
-  skillsCliAllRun,
-  skillsCliAllWarnings,
   skillsCliNames,
   skillsCliNoneRun,
   skillsCliRun,
@@ -274,7 +273,8 @@ test.describe("Import skills in the Hub card of Settings", () => {
     await openSettings(cli, page);
     const run = cli.register(
       ["skill", "import", "--from", "skills-cli", "--all"],
-      { events: skillsCliRun, holdAfter: 3 }
+      // The fetch alone: no skill has started.
+      { events: skillsCliRun, holdAfter: 1 }
     );
     await settingsSection(page)
       .getByRole("button", { name: "Import from Skills CLI" })
@@ -282,6 +282,7 @@ test.describe("Import skills in the Hub card of Settings", () => {
     const open = dialog(page);
     await open.getByRole("button", { exact: true, name: "Import" }).click();
     await run.started;
+    await expect(progress(open)).toHaveText("Importing…");
     await open.getByRole("button", { name: "Cancel" }).click();
     await expect(open).toHaveCount(0);
     expect(cli.cancels).toHaveLength(1);
@@ -365,29 +366,29 @@ test.describe("Import skills in the Hub card of Settings", () => {
 });
 
 test.describe("Import all in the Unmanaged header", () => {
-  test("covers both tools, grouped, and runs them one after the other with one progress", async ({
+  test("covers both tools, grouped, and imports them in one run with one progress", async ({
     cli,
     page,
   }) => {
     await openSkills(cli, page);
-    const first = cli.register(
-      ["skill", "import", "--from", "skills-cli", "--all"],
+    const run = cli.register(
+      [
+        "skill",
+        "import",
+        "--from",
+        "skills-cli",
+        "--from",
+        "skillshare",
+        "--all",
+      ],
       {
-        events: skillsCliAllRun,
-        // The fetch alone: no skill has started.
-        holdAfter: 1,
-        logs: skillsCliAllWarnings.map((message) => ({
+        events: bothToolsRun(),
+        // Skillshare's source and its two skills, then the Skills CLI's source and two of its three.
+        holdAfter: 6,
+        logs: bothToolsWarnings().map((message) => ({
           level: "warn",
           message,
         })),
-      }
-    );
-    const second = cli.register(
-      ["skill", "import", "--from", "skillshare", "--all"],
-      {
-        events: skillshareRun,
-        // Its fetch and api-docs' first step.
-        holdAfter: 2,
       }
     );
     await unmanaged(page).getByRole("button", { name: "Import all" }).click();
@@ -407,27 +408,32 @@ test.describe("Import all in the Unmanaged header", () => {
       "Waiting: frontend__ui",
     ]);
     await open.getByRole("button", { exact: true, name: "Import" }).click();
-    await first.started;
-    await expect(progress(open)).toHaveText("Importing…");
+    await run.started;
+    // One count over both tools, and each skill's step on the row of its tool.
+    await expect(progress(open)).toHaveText("Importing 4 of 5");
+    await expect(rows(open, "Skills CLI")).toHaveText([
+      "Importing: commit-style",
+      "Importing: deck-outline",
+      "Waiting: scratch",
+    ]);
+    await expect(rows(open, "Skillshare")).toHaveText([
+      "Importing: api-docs",
+      "Importing: frontend__ui",
+    ]);
     cli.register(["skill", "import"], {
       events: previewWith([...skillsCliNames, ...skillshareNames]),
     });
-    first.release();
-    await second.started;
-    // Three of the Skills CLI's, then the first of Skillshare's: one count over both.
-    await expect(progress(open)).toHaveText("Importing 4 of 5");
-    await expect(rows(open, "Skills CLI").first()).toHaveText(
-      "Imported: commit-style"
-    );
-    await expect(rows(open, "Skillshare")).toHaveText([
-      "Importing: api-docs",
-      "Waiting: frontend__ui",
-    ]);
-    second.release();
+    run.release();
     await expect(progress(open)).toHaveText("Imported 5 skills");
-    await expect(rows(open, "Skills CLI").last()).toHaveText(
-      "Imported: scratch"
-    );
+    await expect(rows(open, "Skills CLI")).toHaveText([
+      "Imported: commit-style",
+      "Imported: deck-outline",
+      "Imported: scratch",
+    ]);
+    await expect(rows(open, "Skillshare")).toHaveText([
+      "Imported: api-docs",
+      "Imported: frontend__ui",
+    ]);
     await expect(
       refused(open).getByRole("button", { name: "1 skill can't be imported" })
     ).toBeVisible();
@@ -437,8 +443,16 @@ test.describe("Import all in the Unmanaged header", () => {
       0
     );
     expect(ran(cli)).toEqual([
-      ["skill", "import", "--from", "skills-cli", "--all", "--json"],
-      ["skill", "import", "--from", "skillshare", "--all", "--json"],
+      [
+        "skill",
+        "import",
+        "--from",
+        "skills-cli",
+        "--from",
+        "skillshare",
+        "--all",
+        "--json",
+      ],
     ]);
   });
 
@@ -447,13 +461,25 @@ test.describe("Import all in the Unmanaged header", () => {
     page,
   }) => {
     await openSkills(cli, page, previewWith(), `/#/skills/${MOVED}`);
-    cli.register(["skill", "import", "--from", "skills-cli", "--all"], {
-      events: skillsCliRun,
-      exitCode: 5,
-    });
-    cli.register(["skill", "import", "--from", "skillshare", "--all"], {
-      events: skillshareRun,
-    });
+    cli.register(
+      [
+        "skill",
+        "import",
+        "--from",
+        "skills-cli",
+        "--from",
+        "skillshare",
+        "--all",
+      ],
+      {
+        events: bothToolsRun([MOVED]),
+        exitCode: 5,
+        logs: bothToolsWarnings([MOVED]).map((message) => ({
+          level: "warn",
+          message,
+        })),
+      }
+    );
     cli.register(["skill", "import"], {
       events: previewWith(["deck-outline", "scratch", ...skillshareNames]),
     });
