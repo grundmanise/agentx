@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -319,21 +320,54 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 
 // TestServeSearchesTheHubsForks covers the hub in the index: a machine
 // that read the hub's forks finds them by name or description, under
-// the hub's URL, each named as `skill add --name` takes it.
+// the hub's URL, each named as `skill add --name` takes it. A fork the
+// machine can install carries what its installable_skill event says of it,
+// and no longer does once the machine holds it, which moves neither a
+// source nor a fork of the hub.
 func TestServeSearchesTheHubsForks(t *testing.T) {
 	t.Parallel()
-	_, b, _, remote := hubHomes(t)
-	b.mustRun("skill", "list", "--remote")
+	a, b, s, remote := hubHomes(t)
+	b.mustRun("skill", "add", "--name", "beta")
 	p := b.serve(t, "--json")
+	p.passInventories = true // the install changes the library the inventory lists
 	p.next("inventory")
 
 	hub := "file://" + remote
-	if got, want := p.search("s1", "alpha"), []string{hub + "  alpha"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("results = %q, want %q", got, want)
+	// onHub is the results of a search under the hub's URL: beta's install
+	// added the source both forks came from, whose skills match too.
+	onHub := func(id, query string) []map[string]any {
+		var found []map[string]any
+		for _, r := range p.searched(id, query)["results"].([]any) {
+			if m := r.(map[string]any); m["source"] == hub {
+				found = append(found, m)
+			}
+		}
+		return found
 	}
+	alpha := onHub("s1", "alpha")
+	if len(alpha) != 1 || alpha[0]["name"] != "alpha" || alpha[0]["subpath"] != "" {
+		t.Fatalf("results on the hub = %v, want alpha alone", alpha)
+	}
+	alike(t, "alpha's installable", alpha[0]["installable"], map[string]any{
+		"fork_id":          a.trailer(lineage.ForkRef("alpha"), lineage.TrailerForkID),
+		"upstream":         s.url,
+		"upstream_subpath": "skills/alpha",
+	})
 	// By its description too, read from the SKILL.md in the fork's skill directory.
-	if got, want := p.search("s2", "first skill"), []string{hub + "  alpha"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("results = %q, want %q", got, want)
+	if got := onHub("s2", "first skill"); len(got) != 1 || got[0]["name"] != "alpha" {
+		t.Errorf("results on the hub = %v, want alpha alone", got)
+	}
+
+	b.runBesideServe("skill", "add", "--name", "alpha")
+	p.refreshed("installed")
+	for _, name := range []string{"alpha", "beta"} {
+		got := onHub("held-"+name, name)
+		if len(got) != 1 || got[0]["name"] != name {
+			t.Fatalf("results on the hub after the install = %v, want %s alone", got, name)
+		}
+		if in, ok := got[0]["installable"]; ok {
+			t.Errorf("%s, which this machine holds, is installable: %v", name, in)
+		}
 	}
 	equal(t, "exit", p.close(), 0)
 }

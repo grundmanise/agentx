@@ -6,7 +6,7 @@
 import type {
   Configuration,
   Install,
-  InstallableSkillEvent,
+  Installable,
   LibraryEntry,
   SearchResult,
   Source,
@@ -455,12 +455,18 @@ export const listingCards = (
   );
 
 /**
+ * One of your skills on the hub that this machine can install: its name and what its history
+ * records, as an `installable_skill` event or a search result's `installable` gives them.
+ */
+export type InstallableSkill = Installable & { name: string };
+
+/**
  * The state of one of your skills on the hub, by its name: a library entry of the
  * name is in the way, unless it is the same skill installed from its upstream without edits,
  * which the install replaces.
  */
 const installableStatus = (
-  skill: InstallableSkillEvent,
+  skill: InstallableSkill,
   library: LibraryEntry[]
 ): CardState | undefined => {
   const named = library.find((e) => e.name === skill.name);
@@ -477,9 +483,9 @@ const installableStatus = (
     : { holder: named, status: "name-taken" };
 };
 
-/** The cards of your skills on the hub, as `skill list --remote` gave them. */
+/** The cards of your skills on the hub, as `skill list --remote` or a search answer gave them. */
 export const installableCards = (
-  installable: InstallableSkillEvent[],
+  installable: InstallableSkill[],
   library: LibraryEntry[]
 ): SkillCard[] =>
   installable.map((s) => ({

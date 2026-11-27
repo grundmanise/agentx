@@ -465,10 +465,13 @@ func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	return append([]string{h, gitx.StorePath(h), logs, refs}, trees...), trees
 }
 
-// indexedHub is the hub as the source index reads it: its URL and the
-// tips of its forks' branches the store holds, from the last fetch of it.
-// No hub is the zero Hub, and so is a store that does not exist yet, which
-// holds no branch of it.
+// indexedHub is the hub as the source index reads it: its URL, the tips
+// of its forks' branches the store holds, from the last fetch of it, and
+// the forks among them this machine can install, as skill list --remote
+// lists them, see installableAmong, read from the store alone: one
+// for-each-ref of its own branches, and a walk of each tip serve has not
+// walked. No hub is the zero Hub, and so is a store that does not exist
+// yet, which holds no branch of it.
 func (inv *invocation) indexedHub(ctx context.Context, gitDir string, sources []home.Source) (source.Hub, error) {
 	for _, entry := range sources {
 		if !entry.Hub {
@@ -481,7 +484,22 @@ func (inv *invocation) indexedHub(ctx context.Context, gitDir string, sources []
 		if err != nil {
 			return source.Hub{}, err
 		}
-		return source.Hub{URL: entry.URL, Tips: tips}, nil
+		if len(tips) == 0 {
+			return source.Hub{URL: entry.URL, Tips: tips}, nil
+		}
+		records, err := inv.forkRecords(ctx, gitDir)
+		if err != nil {
+			return source.Hub{}, err
+		}
+		events, _, err := inv.installableAmong(ctx, gitDir, entry.URL, tips, records)
+		if err != nil {
+			return source.Hub{}, err
+		}
+		installable := make(map[string]source.Installable, len(events))
+		for _, ev := range events {
+			installable[ev.Name] = source.Installable{ForkID: ev.ForkID, Upstream: ev.Upstream, UpstreamSubpath: ev.UpstreamSubpath}
+		}
+		return source.Hub{URL: entry.URL, Tips: tips, Installable: installable}, nil
 	}
 	return source.Hub{}, nil
 }
