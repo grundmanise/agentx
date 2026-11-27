@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import type { Install, SourceSkillEvent } from "#/cli/events.gen.ts";
+import type { Install, Source } from "#/cli/events.gen.ts";
 import {
   installableCards,
   installOf,
@@ -117,10 +117,8 @@ const openSources = async (
   first: InlineEvent = inventory
 ) => {
   cli.onServeStart({ events: [first] });
-  cli.register(["source", "skills", ACME_ID], {
-    events: [{ ...acme, type: "source" }, ...acmeSkills],
-  });
-  cli.register(["source", "skills", ZETA_ID], { events: [] });
+  cli.serveListing(ACME, acmeSkills, acme.commit);
+  cli.serveListing(ZETA, []);
   cli.register(["skill", "list", "--remote"], { events: installable });
   await page.goto("/#/sources");
   await expect(
@@ -184,15 +182,13 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
     "zeta/tools",
     "acme/more",
   ]);
-  // Only the open source's listing is read, once for the commit the source is at.
-  expect(commandLines(cli)).toEqual([`source skills ${ACME_ID}`]);
+  // Only the open source's listing is read, once for the commit the source is at, from serve.
+  expect(cli.listingsRead).toEqual([ACME]);
   await pill(page, "zeta/tools").click();
   await pill(page, "acme/skills").click();
   await expect(row(page, "artifacts")).toBeVisible();
-  expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
-    `source skills ${ZETA_ID}`,
-  ]);
+  expect(cli.listingsRead).toEqual([ACME, ZETA]);
+  expect(commandLines(cli)).toEqual([]);
 });
 
 test("the open source's card: its name, its full URL linking to the repository, a Read-only tag, and its facts", async ({
@@ -304,10 +300,8 @@ test("a source listing: the skills A to Z, each state with its label and, once o
   await pill(page, "zeta/tools").click();
   await expect(page.getByText("No skills in this source")).toBeVisible();
   expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
     `source read ${ACME_ID} skills/xlsx`,
     `source read ${ACME_ID} skills/scratch`,
-    `source skills ${ZETA_ID}`,
   ]);
 });
 
@@ -362,18 +356,16 @@ test("a source of plugins whose skills share names: a row each, drawn once, eith
     (_, i) => `skill-${String(i).padStart(2, "0")}`
   );
   const listing = ["alpha", "beta"].flatMap((plugin) =>
-    shared.map((name): InlineEvent => ({
+    shared.map((name) => ({
       description: `${name} of ${plugin}`,
       name,
-      source: ACME_ID,
       subpath: `${plugin}/skills/${name}`,
       tree: `t-${plugin}-${name}`,
-      type: "source_skill",
     }))
   );
   cli.onServeStart({ events: [inventory] });
-  cli.register(["source", "skills", ACME_ID], { events: listing });
-  cli.register(["source", "skills", ZETA_ID], { events: [] });
+  cli.serveListing(ACME, listing, acme.commit);
+  cli.serveListing(ZETA, []);
   cli.register(["skill", "list", "--remote"], { events: installable });
   await page.goto("/#/sources");
   // A to Z, so the two skills of a name sit side by side, the first of the listing first.
@@ -439,7 +431,6 @@ test("a source of plugins whose skills share names: a row each, drawn once, eith
     page.getByRole("link", { exact: true, name: "beta/skills/skill-89" })
   ).toBeVisible();
   expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
     `source read ${ACME_ID} beta/skills/skill-89`,
   ]);
 });
@@ -532,10 +523,7 @@ test("opening a row reads its SKILL.md once, then opens, and links to the skill"
   await expect(
     opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
   ).toContainText("# Word documents");
-  expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
-    `source read ${ACME_ID} skills/docx`,
-  ]);
+  expect(commandLines(cli)).toEqual([`source read ${ACME_ID} skills/docx`]);
 });
 
 test("the bar slides up from below the edge, and back down once nothing is selected", async ({
@@ -1222,39 +1210,36 @@ test("Add source closes at once and shows the source loading, then opens it full
   await openSources(cli, page);
   const newId = "9f8e7d6c5b4a3210";
   const newUrl = "https://github.com/acme/more";
+  const added: Source = {
+    added: new Date().toISOString(),
+    commit: "5b4a3c2d1e0f9a",
+    id: newId,
+    last_fetched: new Date().toISOString(),
+    skills: 2,
+    url: newUrl,
+  };
   const adding = cli.register(["source", "add", "acme/more"], {
-    events: [
-      {
-        added: new Date().toISOString(),
-        id: newId,
-        last_fetched: new Date().toISOString(),
-        skills: 2,
-        type: "source",
-        url: newUrl,
-      },
-    ],
+    events: [{ ...added, type: "source" }],
     holdAfter: 0,
   });
-  cli.register(["source", "skills", newId], {
-    events: [
+  cli.serveListing(
+    newUrl,
+    [
       {
         description: "Review a change",
         name: "review",
-        source: newId,
         subpath: "review",
         tree: "t1",
-        type: "source_skill",
       },
       {
         description: "Triage an issue",
         name: "triage",
-        source: newId,
         subpath: "triage",
         tree: "t2",
-        type: "source_skill",
       },
     ],
-  });
+    added.commit
+  );
   // A search stays while the dialog is open, and ends once the source is added.
   const field = page.getByRole("searchbox", { name: "Search all sources" });
   await field.fill("doc");
@@ -1296,16 +1281,18 @@ test("Add source closes at once and shows the source loading, then opens it full
     "zeta/tools",
     "acme/more",
   ]);
+  // Its listing is read once the inventory lists the source.
+  expect(cli.listingsRead).toEqual([ACME]);
+  await cli.serveEmit([
+    { ...inventory, scan_counter: 2, sources: [...sources, added] },
+  ]);
   await expect(check(page, "review")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "triage")).toHaveAttribute("aria-pressed", "true");
   await expect(
     bar(page).getByRole("button", { exact: true, name: "Add 2" })
   ).toBeVisible();
-  expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
-    "source add acme/more",
-    `source skills ${newId}`,
-  ]);
+  expect(cli.listingsRead).toEqual([ACME, newUrl]);
+  expect(commandLines(cli)).toEqual(["source add acme/more"]);
 
   // The preselection installs with --all.
   const add = cli.register(["skill", "add", newUrl, "--all"], {
@@ -1420,7 +1407,6 @@ test("Hub lists the hub's installable skills and adds by name", async ({
   await add.started;
   await expect(toasts(page).getByText("Added 1 skill")).toBeVisible();
   expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
     "skill list --remote",
     "skill add --name release-notes",
   ]);
@@ -1500,6 +1486,19 @@ test("Refresh fetches the source, then reads the listing of the commit it moved 
   // The new fetch comes with the inventory that follows it: its commit and its count.
   await expect.poll(() => cli.serveRequests.length).toBe(1);
   const now = new Date().toISOString();
+  cli.serveListing(
+    ACME,
+    [
+      ...acmeSkills,
+      {
+        description: "Draw charts",
+        name: "zcharts",
+        subpath: "skills/zcharts",
+        tree: "t-zcharts",
+      },
+    ],
+    "9d8c7b6a5f4e3d"
+  );
   await cli.serveEmit([
     {
       ...inventory,
@@ -1513,13 +1512,9 @@ test("Refresh fetches the source, then reads the listing of the commit it moved 
   ]);
   await expect(fact(page, "Fetched")).toHaveText("just now");
   await expect(pill(page, "acme/skills")).toHaveText("acme/skills9");
-  await expect
-    .poll(() => commandLines(cli))
-    .toEqual([
-      `source skills ${ACME_ID}`,
-      `source fetch ${ACME_ID}`,
-      `source skills ${ACME_ID}`,
-    ]);
+  await expect(row(page, "zcharts")).toBeVisible();
+  await expect.poll(() => cli.listingsRead).toEqual([ACME, ACME]);
+  expect(commandLines(cli)).toEqual([`source fetch ${ACME_ID}`]);
 });
 
 test("Refresh all fetches every source in one run, then reads your skills, pending until it ends", async ({
@@ -1563,8 +1558,8 @@ test("Refresh all fetches every source in one run, then reads your skills, pendi
   ]);
   await expect(fact(page, "Fetched")).toHaveText("just now");
   // The fetch moved no source to another commit, so no listing is read again.
+  expect(cli.listingsRead).toEqual([ACME]);
   expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
     "source fetch --all",
     "skill list --remote",
   ]);
@@ -1621,10 +1616,8 @@ test("Remove with its installed skills removes each skill, then the source", asy
   );
   await expect(bar(page)).toHaveCount(0);
   expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
     "skill remove pdf",
     `source remove ${ACME}`,
-    `source skills ${ZETA_ID}`,
   ]);
 });
 
@@ -1665,7 +1658,6 @@ test("Retry after the lock resumes the removal: the skill, then the source", asy
     toasts(page).getByText("Source and 1 skill removed")
   ).toBeVisible();
   expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
     "skill remove pdf",
     "skill remove pdf",
     `source remove ${ACME}`,
@@ -1685,26 +1677,20 @@ test("Remove alone removes the source and keeps its skills", async ({
   });
   await confirm.getByRole("button", { name: "Remove" }).click();
   await expect(toasts(page).getByText("Source removed")).toBeVisible();
-  expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
-    `source skills ${ZETA_ID}`,
-    `source remove ${ZETA}`,
-  ]);
+  expect(commandLines(cli)).toEqual([`source remove ${ZETA}`]);
 });
 
 test("a source whose skills share a name: either can be selected, the other left out by its folder", () => {
-  const listing: SourceSkillEvent[] = [
+  const listing = [
     ["alpha/pdf", "pdf"],
     ["beta/pdf", "pdf"],
     ["format", "format"],
   ].map(([subpath = "", name = ""]) => ({
     description: name,
     name,
-    schema_version: 5,
     source: ACME_ID,
     subpath,
     tree: `t-${subpath}`,
-    type: "source_skill",
   }));
   const cards = listingCards(listing, ACME, []);
   const [alpha, beta, format] = cards;
@@ -1799,7 +1785,11 @@ test("the dates of a card's skill: a source's by its source and subpath, a hub s
     { added, name: "docx", source: ACME, subpath: "docx" },
   ];
   const cards = [
-    ...listingCards(acmeSkills, ACME, library),
+    ...listingCards(
+      acmeSkills.map((s) => ({ ...s, source: ACME_ID })),
+      ACME,
+      library
+    ),
     ...installableCards(installable, library),
   ];
   // Which entry each card reads, by its index; -1 for none.

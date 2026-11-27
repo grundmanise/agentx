@@ -222,6 +222,7 @@ var typeNames = map[reflect.Type]string{
 	reflect.TypeFor[home.Source]():   "SettingsSource",
 	reflect.TypeFor[scan.Settings](): "InventorySettings",
 	reflect.TypeFor[source.Match]():  "SearchResult",
+	reflect.TypeFor[listedSkill]():   "ListedSkill",
 }
 
 // tsGen writes TypeScript declarations for Go structs by the rules
@@ -467,6 +468,7 @@ var methodResults = []struct {
 	{"run", runResult{}},
 	{"refresh", refreshResult{}},
 	{"search", searchResult{}},
+	{"listing", listingResult{}},
 }
 
 // methodResultName is the TypeScript name of a method's result: search's

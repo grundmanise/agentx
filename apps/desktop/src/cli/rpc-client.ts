@@ -1,11 +1,12 @@
 // JSON-RPC 2.0 with `agentx serve` (docs/spec/cli-contract.md, The WebSocket door), whatever
 // carries the messages: a WebSocket in a browser (socket-wire.ts), or the serve child's stdin and
-// stdout inside the Tauri window (tauri-wire.ts). Serve answers `refresh` and `search` with
-// results; they reach the store as `refresh_complete` and `search` events of the child
+// stdout inside the Tauri window (tauri-wire.ts). Serve answers `refresh`, `search` and `listing` with
+// results; they reach the store as `refresh_complete`, `search` and `listing` events of the child
 // (transport.ts), so the store reads every wire alike.
 import { SCHEMA_VERSION } from "#/cli/events.gen.ts";
 import type {
   CliEvent,
+  ListingMethodResult,
   LogEvent,
   RefreshMethodResult,
   RunMethodResult,
@@ -98,6 +99,12 @@ const isSearchAnswer = (value: unknown): value is SearchMethodResult =>
   typeof value.instance_id === "string" &&
   typeof value.query === "string" &&
   Array.isArray(value.results);
+
+const isListingAnswer = (value: unknown): value is ListingMethodResult =>
+  isObject(value) &&
+  typeof value.instance_id === "string" &&
+  typeof value.source === "string" &&
+  Array.isArray(value.skills);
 
 /** An event's line as the supervisor reads a line: an event, a log event or an invalid line. */
 const lineOf = (params: EventParams): RunLine | undefined => {
@@ -482,6 +489,42 @@ export const rpcCalls = ({
   };
 
   /**
+   * Passes serve's answer to a listing request on as the `listing` event of a child: with the
+   * skills, or with none when serve holds no listing of the source. A closed connection answers
+   * nothing.
+   */
+  const listed = async (
+    socket: Peer,
+    requestId: string,
+    source: string,
+    onWritten: (failure?: string) => void
+  ) => {
+    const answer = await socket.request(
+      requestId,
+      "listing",
+      { source },
+      { onWritten }
+    );
+    if ("closed" in answer) {
+      return;
+    }
+    emitLine({
+      childId: socket.childId,
+      event: {
+        instance_id: socket.instanceId(),
+        source,
+        ...("result" in answer && isListingAnswer(answer.result)
+          ? answer.result
+          : {}),
+        request_id: requestId,
+        schema_version: SCHEMA_VERSION,
+        type: "listing",
+      },
+      kind: "event",
+    });
+  };
+
+  /**
    * Sends a request to serve, and resolves once it is written; its answer comes as an event. It
    * fails when serve was not started, or when the request could not be written, as to a serve
    * child that ended.
@@ -496,9 +539,13 @@ export const rpcCalls = ({
     const onWritten = (failure?: string) => {
       written.put(failure === undefined ? {} : { failure });
     };
-    void (r.type === "refresh"
-      ? refreshed(socket, r.request_id, onWritten)
-      : searched(socket, r.request_id, r.query, onWritten));
+    if (r.type === "refresh") {
+      void refreshed(socket, r.request_id, onWritten);
+    } else if (r.type === "search") {
+      void searched(socket, r.request_id, r.query, onWritten);
+    } else {
+      void listed(socket, r.request_id, r.source, onWritten);
+    }
     const { failure } = (await written.take()) ?? {};
     if (failure !== undefined) {
       throw new Error(failure);

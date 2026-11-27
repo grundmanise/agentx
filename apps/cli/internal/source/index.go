@@ -91,6 +91,22 @@ func (idx *Index) Search(query string) []Match {
 	return matches
 }
 
+// Listing is the shared source at url as the index holds it, and whether the
+// index holds a listing of it: false for a URL that is no shared source of
+// the index and for a source the store could not list. It reads memory only.
+func (idx *Index) Listing(url string) (Indexed, bool) {
+	if idx == nil {
+		return Indexed{}, false
+	}
+	for _, src := range idx.Sources {
+		if src.URL == url {
+			_, listed := idx.read[src.URL+"\x00"+src.Commit]
+			return src, listed
+		}
+	}
+	return Indexed{}, false
+}
+
 // Hub is the hub as the index reads it: its canonical URL and the tip of
 // each of its forks' branches, skills/<name>, as the store holds them, by
 // name. The zero Hub is no hub.

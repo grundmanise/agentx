@@ -14,6 +14,7 @@ import type {
 } from "#/cli/events.gen.ts";
 import { serve } from "#/cli/transport.ts";
 import type {
+  ListingEvent,
   RefreshCompleteEvent,
   SearchEvent,
   ServeEvent,
@@ -151,6 +152,47 @@ const answerSearch = (event: SearchEvent) => {
   }
 };
 
+/** The listing requests sent and not answered yet, by request id. */
+const listings = new Map<string, ReturnType<typeof slot<ListingEvent>>>();
+
+/** Gives up on every listing request waiting: a child that ended answers none. */
+const dropListings = () => {
+  for (const answer of listings.values()) {
+    answer.put();
+  }
+  listings.clear();
+};
+
+/**
+ * Asks the serve child for the skills of the source at `url` (docs/spec/cli-contract.md, Serve),
+ * which it answers from memory, and resolves with the matching `listing` event; undefined when
+ * the serve child is not running or ends before it answers.
+ */
+export const listing = async (
+  url: string
+): Promise<ListingEvent | undefined> => {
+  const requestId = crypto.randomUUID();
+  const answer = slot<ListingEvent>();
+  listings.set(requestId, answer);
+  try {
+    await serve.request({
+      request_id: requestId,
+      source: url,
+      type: "listing",
+    });
+  } catch {
+    listings.delete(requestId);
+    answer.put();
+  }
+  return await answer.take();
+};
+
+/** Answers the listing request the event names. */
+const answerListing = (event: ListingEvent) => {
+  listings.get(event.request_id)?.put(event);
+  listings.delete(event.request_id);
+};
+
 /**
  * Makes `childId` the active child, unless a later one already is. The inventory shown stays until
  * the new child sends its own, and the requests sent to earlier children go to it with new ids.
@@ -163,6 +205,7 @@ const activate = (childId: number) => {
   logBackground("background scan started");
   // A search the child before did not answer is never answered: the new child's index is asked anew.
   dropSearch();
+  dropListings();
   const { refreshes } = useAppStore.getState();
   const unanswered = Object.keys(refreshes).filter(
     (id) => (refreshes[id] ?? 0) < childId
@@ -242,6 +285,8 @@ const apply = (childId: number, event: ServeEvent) => {
     acknowledge(event);
   } else if (event.type === "search") {
     answerSearch(event);
+  } else if (event.type === "listing") {
+    answerListing(event);
   } else if (event.type === "update_check") {
     // It carries no words of its own: a check that failed shows as the event.
     if (event.ok) {

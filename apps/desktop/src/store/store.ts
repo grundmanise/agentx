@@ -12,11 +12,20 @@ import type {
   HistoryEvent,
   InstallableSkillEvent,
   InventoryEvent,
+  ListedSkill,
   MachineEvent,
   SkillFileEvent,
   Source,
-  SourceSkillEvent,
 } from "#/cli/events.gen.ts";
+
+/**
+ * A source's skills as serve's `listing` gave them, each with the id of the source, and the commit
+ * they were read at: none for a source not fetched.
+ */
+export interface Listing {
+  commit?: string;
+  skills: (ListedSkill & { source: string })[];
+}
 
 /** Why a command or the serve child failed, as the CLI said it. */
 export interface Problem {
@@ -90,8 +99,11 @@ export interface AppState {
   pending: Record<string, string>;
   /** The history of each hub skill read so far, by name. */
   histories: Record<string, HistoryRead>;
-  /** The skills of each source opened so far, by source id, from `source skills <id>`. */
-  listings: Record<string, SourceSkillEvent[]>;
+  /**
+   * The skills of each source opened so far, by source id, as serve's `listing` gave them, with
+   * the commit they were read at.
+   */
+  listings: Record<string, Listing>;
   /**
    * Your skills on the hub that this machine has not installed, from
    * `skill list --remote`; undefined until read.

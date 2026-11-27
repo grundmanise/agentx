@@ -118,14 +118,32 @@ func TestServeAnswersSearchFromTheSourceIndex(t *testing.T) {
 		}
 	}
 
-	// The inventory counts each source's skills as a listing does.
+	// The inventory counts each source's skills, and a listing names them
+	// at the commit the inventory gives.
 	counts := map[string]any{}
+	commits := map[string]any{}
 	for _, src := range inventory["sources"].([]any) {
 		m := src.(map[string]any)
-		counts[m["url"].(string)] = m["skills"]
+		counts[m["url"].(string)], commits[m["url"].(string)] = m["skills"], m["commit"]
 	}
 	if want := map[string]any{alpha.url: float64(3), beta.url: float64(2)}; !reflect.DeepEqual(counts, want) {
 		t.Errorf("skills of the inventory's sources = %v, want %v", counts, want)
+	}
+	p.request("l1", "listing", map[string]any{"source": alpha.url})
+	listing := p.answered("l1")
+	equal(t, "listing.source", listing["source"], alpha.url)
+	equal(t, "listing.commit", listing["commit"], commits[alpha.url])
+	var listed []string
+	for _, sk := range listing["skills"].([]any) {
+		m := sk.(map[string]any)
+		listed = append(listed, m["subpath"].(string)+" "+m["name"].(string))
+	}
+	if want := []string{"commit commit", "review review", "tools/lint lint"}; !reflect.DeepEqual(listed, want) {
+		t.Errorf("listing = %q, want %q", listed, want)
+	}
+	p.request("l2", "listing", map[string]any{"source": "https://example.com/not/added"})
+	if _, rpcError := p.response("l2"); rpcError == nil {
+		t.Error("a listing of a URL that is no source was answered with a result")
 	}
 
 	equal(t, "exit", p.close(), 0)
@@ -202,12 +220,16 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	}
 
 	s.skill("release", "release", "Cut a release commit", nil)
-	s.commit("second")
+	second := s.commit("second")
 	h.runBesideServe("source", "add", s.url)
 	p.refreshed("fetched")
 	want := []string{s.url + " commit commit", s.url + " release release"}
 	if got := p.search("s2", "commit"); !reflect.DeepEqual(got, want) {
 		t.Errorf("results after the re-fetch = %q, want %q", got, want)
+	}
+	p.request("l1", "listing", map[string]any{"source": s.url})
+	if listing := p.answered("l1"); listing["commit"] != second || len(listing["skills"].([]any)) != 2 {
+		t.Errorf("listing after the re-fetch = %v, want 2 skills at %s", listing, second)
 	}
 
 	// A source fetch moves the ref and bumps the version file like an add,

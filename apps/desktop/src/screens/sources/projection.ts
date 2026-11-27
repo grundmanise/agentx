@@ -10,10 +10,10 @@ import type {
   LibraryEntry,
   SearchResult,
   Source,
-  SourceSkillEvent,
 } from "#/cli/events.gen.ts";
 import { formatAgo } from "#/lib/dates.ts";
 import { hostAndPath, shortSource } from "#/screens/skills/projection.ts";
+import type { Listing } from "#/store/store.ts";
 
 /** The key of the Hub pill and the source of its cards, beside the source ids and URLs. */
 export const HUB_SKILLS = "your-skills";
@@ -433,9 +433,9 @@ const selector = (c: SkillCard): string => {
   return subpath.includes("/") ? subpath : `${subpath}/`;
 };
 
-/** The cards of a source's listing, as `source skills <id>` gave it. */
+/** The cards of a source's listing, as serve's `listing` or `source skills` gave it. */
 export const listingCards = (
-  listing: SourceSkillEvent[],
+  listing: Listing["skills"],
   url: string,
   library: LibraryEntry[],
   /** The ref the skills' pages are at: `pageRef` of the source. */

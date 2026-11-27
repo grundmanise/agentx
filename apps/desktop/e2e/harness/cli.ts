@@ -31,7 +31,7 @@ import { test as base } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { SCHEMA_VERSION } from "#/cli/events.gen.ts";
-import type { Configuration, LogEvent } from "#/cli/events.gen.ts";
+import type { Configuration, ListedSkill, LogEvent } from "#/cli/events.gen.ts";
 import type { ServeEvent } from "#/cli/transport.ts";
 
 import { refusal } from "./command-line.ts";
@@ -345,6 +345,8 @@ export class MockCli {
    * the opener plugin's open, else the editor the saved preferences held when `editor_open` ran.
    */
   readonly editorOpens: { path: string; editor: unknown }[] = [];
+  /** The source URL of every listing request written to serve's stdin, in order. */
+  readonly listingsRead: string[] = [];
   /** The request id of every refresh and search request, in order. */
   get requestIds(): string[] {
     return this.serveRequests.map((written) => {
@@ -370,6 +372,11 @@ export class MockCli {
   private readonly running = new Map<string, Pending>();
   /** The refresh and search requests serve has not answered, by request id. */
   private readonly asked = new Map<string, Asked>();
+  /** What serve answers a listing request with, by source URL. */
+  private readonly listed = new Map<
+    string,
+    { commit?: string; skills: ListedSkill[] }
+  >();
   private readonly problems: string[] = [];
   private resolution: Resolution = {
     found: "bundled",
@@ -550,6 +557,17 @@ export class MockCli {
     if (this.problems.length > 0) {
       throw new Error(`the mocked CLI refused:\n${this.problems.join("\n")}`);
     }
+  }
+
+  /**
+   * Sets what serve answers a listing request for the source at `url` with: its skills, at
+   * `commit` for a fetched source. Serve holds no listing of a source never set.
+   */
+  serveListing(url: string, skills: ListedSkill[], commit?: string) {
+    this.listed.set(
+      url,
+      commit === undefined ? { skills } : { commit, skills }
+    );
   }
 
   /**
@@ -930,6 +948,27 @@ export class MockCli {
             : { query, request_id: id, type: method }
         )
       );
+    } else if (method === "listing") {
+      const source = String(field(params, "source"));
+      this.listingsRead.push(source);
+      const held = this.listed.get(source);
+      void this.emitMessages([
+        held === undefined
+          ? {
+              error: { code: -32_000, message: `no listing of ${source}` },
+              id,
+              jsonrpc: "2.0",
+            }
+          : {
+              id,
+              jsonrpc: "2.0",
+              result: {
+                instance_id: `instance-${this.childId}`,
+                source,
+                ...held,
+              },
+            },
+      ]);
     } else {
       this.refuse(`serve has no method ${String(method)}`);
     }

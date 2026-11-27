@@ -1,4 +1,4 @@
-// The kept reads: what a skill's files, history and diffs, a source's listing and a SKILL.md read
+// The kept reads: what a skill's files, history and diffs and a SKILL.md read
 // returned, kept in IndexedDB for the next launch. A read for the same version as one kept is
 // served from here, so a skill selected after a relaunch shows at once. One entry is kept per
 // skill or source and kind of read, the latest; past CACHE_BYTES the least recently used go first.
@@ -12,7 +12,6 @@ export type ReadKind =
   | "files"
   | "history"
   | "installable"
-  | "listing"
   | "skill-md"
   | "update-diff";
 

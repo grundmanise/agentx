@@ -141,5 +141,5 @@ export const launch = (
   }
   // What the Add skills screen reads when it opens: your skills on the hub and the source's.
   cli.register(["skill", "list", "--remote"], { events: [] });
-  cli.register(["source", "skills", "1111111111111111"], { events: [] });
+  cli.serveListing(ACME, []);
 };

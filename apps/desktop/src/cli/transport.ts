@@ -5,7 +5,12 @@
 // `agentx serve --listen` in a browser (socket-wire.ts). Events are typed by events.gen.ts, which
 // is generated from the CLI of this app's own release, so no schema_version is checked here. An
 // event of a type the app does not know is passed on as it came.
-import type { CliEvent, LogEvent, SearchResult } from "#/cli/events.gen.ts";
+import type {
+  CliEvent,
+  ListedSkill,
+  LogEvent,
+  SearchResult,
+} from "#/cli/events.gen.ts";
 import { socketWire } from "#/cli/socket-wire.ts";
 import { tauriWire } from "#/cli/tauri-wire.ts";
 import { inApp } from "#/lib/platform.ts";
@@ -86,8 +91,26 @@ export interface SearchEvent {
   results: SearchResult[];
 }
 
+/**
+ * Serve's answer to a listing request, as the store reads it, made the same way: the skills of
+ * the source at `commit`, or none when serve holds no listing of the source.
+ */
+export interface ListingEvent {
+  type: "listing";
+  schema_version: number;
+  request_id: string;
+  instance_id: string;
+  source: string;
+  commit?: string;
+  skills?: ListedSkill[];
+}
+
 /** An event of the serve child's own: one it wrote, or an answer to a request of the store. */
-export type ServeEvent = CliEvent | RefreshCompleteEvent | SearchEvent;
+export type ServeEvent =
+  | CliEvent
+  | RefreshCompleteEvent
+  | SearchEvent
+  | ListingEvent;
 
 /** The requests the store sends to the serve child. */
 export interface RefreshRequest {
@@ -99,7 +122,12 @@ export interface SearchRequest {
   request_id: string;
   query: string;
 }
-export type ServeRequest = RefreshRequest | SearchRequest;
+export interface ListingRequest {
+  type: "listing";
+  request_id: string;
+  source: string;
+}
+export type ServeRequest = RefreshRequest | SearchRequest | ListingRequest;
 
 /**
  * One line of the serve child's own output, with the id of the child that wrote it: an event on

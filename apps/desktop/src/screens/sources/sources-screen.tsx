@@ -57,6 +57,7 @@ import { search } from "#/store/feed.ts";
 import { loadInstallable, loadLabel, loadListing } from "#/store/loaders.ts";
 import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
+import type { Listing } from "#/store/store.ts";
 
 /** The pending label of the install the action bar runs. */
 export const ADD_LABEL = "add skills";
@@ -71,23 +72,8 @@ const noCards: SkillCard[] = [];
 type Selection = ReadonlyMap<string, SkillCard>;
 const noSelection: Selection = new Map();
 
-/** Loads what a pill shows: a source's listing, or your skills on the hub. */
-const loadPill = async (key: string) => {
-  if (key === HUB_SKILLS) {
-    await loadInstallable();
-    return;
-  }
-  const source = sourcesOf(useAppStore.getState()).find((s) => s.id === key);
-  await loadListing(key, source?.commit);
-};
-
-/** The label of the read that fills a pill, for `usePending`. */
-const loadingLabel = (key: string) =>
-  loadLabel(
-    key === HUB_SKILLS
-      ? ["skill", "list", "--remote"]
-      : ["source", "skills", key]
-  );
+/** The label of the read that fills Hub, for `usePending`. */
+const HUB_LOADING = loadLabel(["skill", "list", "--remote"]);
 
 /** Whether the pill that was open is gone, its source removed. */
 const isGone = (open: string | undefined, pills: SourcePill[]) =>
@@ -118,22 +104,22 @@ const useOpenPill = (
 };
 
 /**
- * Loads what the open pill lists: a source's listing, and again when a fetch moves the source to
- * another commit; Hub's skills when the user did not open it, as when it is the first pill.
+ * Loads what the open pill lists. A source's listing is asked for with each inventory, which
+ * reads it only when the inventory gives the source a commit the listing held is not of. Hub's
+ * skills are read when the user did not open it, as when it is the first pill.
  */
-const useOpenListing = (pill: SourcePill | undefined, opened?: string) => {
-  const key = pill?.key;
-  const commit = pill?.source.commit;
+const useOpenListing = (key: string | undefined, opened?: string) => {
+  const inventory = useAppStore((s) => s.inventory);
   useEffect(() => {
-    if (key === undefined) {
+    if (key === undefined || inventory === undefined) {
       return;
     }
     if (key !== HUB_SKILLS) {
-      void loadListing(key, commit);
+      void loadListing(key);
     } else if (key !== opened) {
-      void loadPill(key);
+      void loadInstallable();
     }
-  }, [key, opened, commit]);
+  }, [key, opened, inventory]);
 };
 
 /**
@@ -269,6 +255,21 @@ const useInstallableWhileSearching = (
   }, [searching, hub, read]);
 };
 
+/** Whether the listing held of the source `id` is of the commit the inventory gives the source. */
+const isListed = (
+  sources: Source[],
+  listings: Record<string, Listing>,
+  id: string | undefined
+) => {
+  const source = sources.find((s) => s.id === id);
+  const listing = id === undefined ? undefined : listings[id];
+  return (
+    source !== undefined &&
+    listing !== undefined &&
+    listing.commit === source.commit
+  );
+};
+
 const noAll: ReadonlyMap<string, SkillCard[]> = new Map();
 
 /** The source a pill's cards carry: its URL, or Hub's key. */
@@ -319,6 +320,8 @@ export const SourcesScreen = () => {
   // The install the bar's rim shows; it stays until the rim has faded.
   const [rim, setRim] = useState<RimRun | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
+  // The source Add source just added: its skills are selected once its listing is read.
+  const [preselect, setPreselect] = useState<string | undefined>();
   const [now, setNow] = useState(() => Date.now());
   // The pill opened last, "" before any, for a load that finishes after the user moved on.
   const opened = useRef("");
@@ -347,7 +350,7 @@ export const SourcesScreen = () => {
     setAllOf((prev) => only(prev, (source) => kept.has(source)));
   });
 
-  useOpenListing(activePill, active);
+  useOpenListing(activePill?.key, active);
 
   /** Sets the query; an empty one shows the listing, and the next search starts from it. */
   const changeQuery = (text: string) => {
@@ -361,11 +364,15 @@ export const SourcesScreen = () => {
   const select = (key: string) => {
     opened.current = key;
     setActive(key);
+    setPreselect(undefined);
     setNow(Date.now());
   };
   const open = (key: string) => {
     select(key);
-    void loadPill(key);
+    // Opening Hub reads your skills again; a source's listing follows the open pill.
+    if (key === HUB_SKILLS) {
+      void loadInstallable();
+    }
   };
 
   // A search answer replaces the listing. While the latest query waits for its answer, the last
@@ -402,7 +409,7 @@ export const SourcesScreen = () => {
       ? noCards
       : nameOrder(
           listingCards(
-            listing,
+            listing.skills,
             activePill.url,
             library,
             pageRef(sources.find((s) => s.id === activePill.key))
@@ -424,9 +431,7 @@ export const SourcesScreen = () => {
   const selectable = allCards.filter((c) => c.status === undefined);
   const selectedCount = selectable.filter((c) => selection.has(c.key)).length;
   const selectableCount = oneOfEachName(selectable).length;
-  const loading = usePending(
-    activeKey === undefined ? "" : loadingLabel(activeKey)
-  );
+  const loading = usePending(activeKey === HUB_SKILLS ? HUB_LOADING : "");
 
   // Each settled query asks serve once; the answer to the latest request replaces the listing.
   useEffect(() => {
@@ -489,6 +494,15 @@ export const SourcesScreen = () => {
       setAllOf((prev) => new Map(prev).set(source, shown));
     }
   };
+  /** Whether the list shows the listing of the source to preselect. */
+  const showsPreselect = () =>
+    preselect === activeKey &&
+    results === undefined &&
+    isListed(sources, listings, preselect);
+  if (showsPreselect()) {
+    setPreselect(undefined);
+    selectAll();
+  }
   /** Deselects the cards the list shows; the ones selected in other sources stay. */
   const clear = () => {
     const showing = new Set(shown.map((c) => c.key));
@@ -662,21 +676,7 @@ export const SourcesScreen = () => {
     }
     select(source.id);
     changeQuery("");
-    await loadPill(source.id);
-    if (opened.current !== source.id) {
-      return;
-    }
-    const state = useAppStore.getState();
-    const listed = listingCards(
-      state.listings[source.id] ?? [],
-      source.url,
-      state.inventory?.library ?? noEntries
-    );
-    const cards = oneOfEachName(listed.filter((c) => c.status === undefined));
-    setSelection(
-      (prev) => new Map([...prev, ...cards.map((c) => [c.key, c] as const)])
-    );
-    setAllOf((prev) => new Map(prev).set(source.url, listed));
+    setPreselect(source.id);
   };
 
   const empty = (): string | undefined => {
