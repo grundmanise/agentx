@@ -4,29 +4,27 @@
 // checks at once; once a check finds an update, the button follows it as the title bar does
 // (`src/app/app-update-status.tsx`): Update to, Installing, Restart to update. Release notes opens
 // this version's release on GitHub, and What's new the release of the update a check found; a
-// build that is no release, version 0.0.0, has no Release notes. A
+// build that is no release, version 0.0.0, has no Release notes. The version and both switches
+// come with the app's settings (`src/lib/app-settings.ts`), so the rows show together. A
 // browser has no app to update, so there the card is left out.
-import { getVersion } from "@tauri-apps/api/app";
-import { useEffect, useId, useState } from "react";
+import { useId } from "react";
 import type { ReactNode } from "react";
 
 import {
   checkAppUpdateNow,
+  includesNightlies,
   installAppUpdate,
-  readCheckUpdates,
-  readIncludeNightlies,
   restartApp,
   setCheckUpdates,
   setIncludeNightlies,
   useAppUpdate,
   useAppUpdateCheckedAt,
   useAppUpdateChecking,
-  useCheckUpdates,
-  useIncludeNightlies,
 } from "#/app/app-update.ts";
 import { Button } from "#/components/ui/button.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
+import { useAppSettings } from "#/lib/app-settings.ts";
 import { formatAgo } from "#/lib/dates.ts";
 import { useNow } from "#/lib/now.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
@@ -126,26 +124,10 @@ const ReleaseLink = ({
 );
 
 /** The version with its Release notes, when the app last checked or the update it found, and the button. */
-const VersionRow = () => {
-  const [version, setVersion] = useState<string>();
+const VersionRow = ({ version }: { version: string }) => {
   const update = useAppUpdate();
   const checkedAt = useAppUpdateCheckedAt();
   const now = useNow();
-  useEffect(() => {
-    let current = true;
-    void (async () => {
-      const read = await getVersion();
-      if (current) {
-        setVersion(read);
-      }
-    })();
-    return () => {
-      current = false;
-    };
-  }, []);
-  if (version === undefined) {
-    return null;
-  }
   let line: ReactNode = "Not checked yet";
   if (update?.phase === "available") {
     line = (
@@ -232,27 +214,19 @@ const IncludeNightlies = ({ checked }: { checked: boolean }) => {
 };
 
 export const AppUpdatesCard = () => {
-  const checked = useCheckUpdates();
-  const nightlies = useIncludeNightlies();
-  // The preferences, before the first background check reads them.
-  useEffect(() => {
-    if (inApp && checked === undefined) {
-      void readCheckUpdates();
-    }
-  }, [checked]);
-  useEffect(() => {
-    if (inApp && nightlies === undefined) {
-      void readIncludeNightlies();
-    }
-  }, [nightlies]);
+  const settings = useAppSettings((s) => s);
   if (!inApp) {
     return null;
   }
   return (
     <SettingsCard title="Updates">
-      <VersionRow />
-      {checked !== undefined && <AutomaticChecks checked={checked} />}
-      {nightlies !== undefined && <IncludeNightlies checked={nightlies} />}
+      {settings !== undefined && (
+        <>
+          <VersionRow version={settings.version} />
+          <AutomaticChecks checked={settings.preferences.check_updates} />
+          <IncludeNightlies checked={includesNightlies(settings)} />
+        </>
+      )}
     </SettingsCard>
   );
 };

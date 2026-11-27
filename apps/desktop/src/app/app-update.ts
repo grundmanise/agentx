@@ -6,15 +6,15 @@
 // (`app-update-status.tsx`), whose click installs it: the download's progress runs on its rim,
 // and once it is installed a click restarts the app into the new version. A browser has no app to
 // update, so none of this runs there.
-import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 
 import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
 import { notify, notifyFailure } from "#/components/toast.tsx";
+import { appSettings, savePreference } from "#/lib/app-settings.ts";
+import type { AppSettings } from "#/lib/app-settings.ts";
 import { inApp } from "#/lib/platform.ts";
-import { readPreferences, savePreferences } from "#/lib/preferences.ts";
 
 /** How often the app checks again while it runs: once a day. */
 const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -45,10 +45,6 @@ interface AppUpdateState {
   checking: boolean;
   /** When the last check that reached the manifest ended (Date.now()); undefined before one. */
   checkedAt?: number;
-  /** The Check for updates preference; undefined until it is read. */
-  checkUpdates?: boolean;
-  /** Whether checks take nightly builds too; undefined until it is read. */
-  includeNightlies?: boolean;
 }
 
 const useAppUpdateStore = create<AppUpdateState>()(() => ({
@@ -73,34 +69,14 @@ export const useAppUpdateCheckedAt = () =>
 /** Whether Check for updates in Settings runs. */
 export const useAppUpdateChecking = () => useAppUpdateStore((s) => s.checking);
 
-/** The Check for updates preference; undefined until it is read. */
-export const useCheckUpdates = () => useAppUpdateStore((s) => s.checkUpdates);
-
-/** Whether checks take nightly builds too; undefined until it is read. */
-export const useIncludeNightlies = () =>
-  useAppUpdateStore((s) => s.includeNightlies);
-
-// How many times the user turned Include nightly builds on or off, so a read that started before
-// a change does not undo it.
-let nightlyChanges = 0;
-
 /**
- * Reads the Include nightly builds preference into the store, and returns it: unset, on in a
- * nightly build and off in a release.
+ * Whether checks take nightly builds too: as the Include nightly builds preference says, and
+ * unset, on in a nightly build and off in a release.
  */
-export const readIncludeNightlies = async () => {
-  const before = nightlyChanges;
-  const [{ include_nightlies: saved }, version] = await Promise.all([
-    readPreferences(),
-    getVersion(),
-  ]);
-  const on = saved ?? version.includes("-nightly.");
-  if (nightlyChanges !== before) {
-    return useAppUpdateStore.getState().includeNightlies ?? on;
-  }
-  useAppUpdateStore.setState({ includeNightlies: on });
-  return on;
-};
+export const includesNightlies = ({
+  nightlies_default: byDefault,
+  preferences,
+}: AppSettings) => preferences.include_nightlies ?? byDefault;
 
 /**
  * Asks the Rust side for an update. An update already installing or installed stays as it is.
@@ -113,7 +89,7 @@ const check = async (manual: boolean) => {
     return;
   }
   try {
-    const nightlies = await readIncludeNightlies();
+    const nightlies = includesNightlies(await appSettings());
     const found = await invoke<Available | null>("app_update_check", {
       nightlies,
     });
@@ -149,18 +125,11 @@ export const checkAppUpdateNow = async () => {
   useAppUpdateStore.setState({ checking: false });
 };
 
-// How many times the user turned Check for updates on or off, so a read that started before a
-// change does not undo it.
-let changes = 0;
-
 /** Turns the Check for updates preference on or off. A toast says when it could not be saved. */
 export const setCheckUpdates = async (on: boolean) => {
-  changes += 1;
-  useAppUpdateStore.setState({ checkUpdates: on });
   try {
-    await savePreferences({ check_updates: on });
+    await savePreference("check_updates", on);
   } catch {
-    useAppUpdateStore.setState({ checkUpdates: !on });
     notifyFailure("Couldn't save the setting");
   }
 };
@@ -170,35 +139,19 @@ export const setCheckUpdates = async (on: boolean) => {
  * title bar offers follows it. A toast says when it could not be saved.
  */
 export const setIncludeNightlies = async (on: boolean) => {
-  nightlyChanges += 1;
-  useAppUpdateStore.setState({ includeNightlies: on });
   try {
-    await savePreferences({ include_nightlies: on });
+    await savePreference("include_nightlies", on);
   } catch {
-    useAppUpdateStore.setState({ includeNightlies: !on });
     notifyFailure("Couldn't save the setting");
     return;
   }
   await check(false);
 };
 
-/**
- * Reads the Check for updates preference into the store, and returns it. When the user changed it
- * while the read ran, the store keeps that change and this returns it.
- */
-export const readCheckUpdates = async () => {
-  const before = changes;
-  const { check_updates: on } = await readPreferences();
-  if (changes !== before) {
-    return useAppUpdateStore.getState().checkUpdates ?? on;
-  }
-  useAppUpdateStore.setState({ checkUpdates: on });
-  return on;
-};
-
-/** A background check, when the preference is on; it reads the preference each time. */
+/** A background check, when the Check for updates preference is on. */
 const checkInBackground = async () => {
-  if (await readCheckUpdates()) {
+  const { preferences } = await appSettings();
+  if (preferences.check_updates) {
     await check(false);
   }
 };

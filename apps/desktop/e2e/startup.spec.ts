@@ -12,6 +12,13 @@ import {
 } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
+declare global {
+  interface Window {
+    /** The lines the Command line row of Settings held, in order, as a test records them. */
+    commandLines?: string[];
+  }
+}
+
 const bundled = "/Applications/agentx.app/Contents/MacOS/agentx";
 const launchLines = [
   ["version", "--json"],
@@ -232,6 +239,41 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
   );
   expect(commands()).not.toContainEqual(["skill", "files", "notes", "--json"]);
   expect(cli.serveStarts).toBe(2);
+});
+
+test("a later launch shows the command line's version and git's together in Settings", async ({
+  cli,
+  page,
+}) => {
+  // Each line the Command line row held, in order, as the page changed.
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    window.commandLines = seen;
+    new MutationObserver(() => {
+      const commandLine = [
+        ...document.querySelectorAll("[data-slot='item']"),
+      ].find((item) => item.textContent.startsWith("Command line"));
+      const line =
+        commandLine?.querySelector("[data-slot='item-description']")
+          ?.textContent ?? "";
+      if (commandLine !== undefined && seen.at(-1) !== line) {
+        seen.push(line);
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const { doctor } = await relaunch(cli, page);
+  await page.goto("/#/settings");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Settings" })
+  ).toBeVisible();
+  doctor.release();
+  await expect(veil(page)).toHaveCount(0);
+  const versions = `agentx ${cliVersion} · git 2.43.0`;
+  await expect(page.getByRole("main")).toContainText(versions);
+  expect(await page.evaluate(() => window.commandLines)).toEqual([
+    "",
+    versions,
+  ]);
 });
 
 test("the arrows do not move the selection under the launch pane", async ({

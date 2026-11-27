@@ -78,10 +78,11 @@ export interface AppState {
    */
   lastChecked: string | undefined;
   /**
-   * The store and its size on disk, from `machine`, read when Settings shows Storage: the
-   * inventory leaves them out, since every git write changes the size. Undefined before a read.
+   * The store and its size on disk, from `machine`, measured each time Settings shows Storage:
+   * the inventory leaves them out, since every git write changes the size. Undefined while it is
+   * measured, "unknown" when it could not be.
    */
-  store: Pick<MachineEvent, "store" | "store_bytes"> | undefined;
+  store: Pick<MachineEvent, "store" | "store_bytes"> | "unknown" | undefined;
   /** Whether the telemetry question was answered this session: it is not asked again. */
   telemetryAnswered: boolean;
   /** What `skill import` would take over, from its preview. */

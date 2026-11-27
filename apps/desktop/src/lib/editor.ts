@@ -1,18 +1,19 @@
-// The editor a skill opens in (ADR 0013): the one way a screen reads or saves the Editor
-// preference, lists the editors found on this machine, and opens a skill's file. The system's
-// default application is the opener plugin's open, scoped to the library and agentx home; an
-// editor the app found and a command line the user typed are the Rust side's `editor_open`, which
-// takes only the file, opens it with the editor the preferences hold, refuses a file outside the
-// library and agentx home, and runs no shell. The preference is the app's own, in its config directory, never a machine
-// setting. A browser can open no editor and keeps no preferences, so there opening a file copies
-// its path, and saving the editor says it can't. Screens call this and never the plugin, and the
-// tests' mocked CLI answers every call.
+// The editor a skill opens in (ADR 0013): the one way a screen saves the Editor preference and
+// opens a skill's file. The system's default application is the opener plugin's open, scoped to
+// the library and agentx home; an editor the app found and a command line the user typed are the
+// Rust side's `editor_open`, which takes only the file, opens it with the editor the preferences
+// hold, refuses a file outside the library and agentx home, and runs no shell. The preference is
+// the app's own, in its config directory, never a machine setting: it comes with the app's
+// settings (`app-settings.ts`), as the editors found on this machine do. A browser can open no
+// editor and keeps no preferences, so there opening a file copies its path, and saving the editor
+// says it can't. Screens call this and never the plugin, and the tests' mocked CLI answers every
+// call.
 import { invoke } from "@tauri-apps/api/core";
 import { openPath } from "@tauri-apps/plugin-opener";
 
 import { notifyFailure } from "#/components/toast.tsx";
+import { appSettings, savePreference } from "#/lib/app-settings.ts";
 import { inApp } from "#/lib/platform.ts";
-import { readPreferences, savePreferences } from "#/lib/preferences.ts";
 import { copyPathInstead, revealInFinder, showInLabel } from "#/lib/reveal.ts";
 
 /** The editor a skill opens in, as the app's preferences keep it. */
@@ -29,12 +30,6 @@ export interface DetectedEditor {
   name: string;
 }
 
-/** The editor the user chose, or the system default when none was saved or the read failed. */
-export const readEditor = async (): Promise<EditorChoice> => {
-  const { editor } = await readPreferences();
-  return editor;
-};
-
 /** Saves the editor the user chose. False when it could not be saved, which a toast says. */
 export const saveEditor = async (editor: EditorChoice): Promise<boolean> => {
   if (!inApp) {
@@ -42,18 +37,12 @@ export const saveEditor = async (editor: EditorChoice): Promise<boolean> => {
     return false;
   }
   try {
-    await savePreferences({ editor });
+    await savePreference("editor", editor);
     return true;
   } catch {
     notifyFailure("Couldn't save the editor");
     return false;
   }
-};
-
-/** Whether the editor opens a skill once the app creates it; off when the read failed. */
-export const readOpenAfterCreate = async (): Promise<boolean> => {
-  const { open_after_create: on } = await readPreferences();
-  return on;
 };
 
 /** Saves whether the editor opens a skill once the app creates it. False when it could not be saved, which a toast says. */
@@ -63,20 +52,11 @@ export const saveOpenAfterCreate = async (on: boolean): Promise<boolean> => {
     return false;
   }
   try {
-    await savePreferences({ open_after_create: on });
+    await savePreference("open_after_create", on);
     return true;
   } catch {
     notifyFailure("Couldn't save the setting");
     return false;
-  }
-};
-
-/** The editors the app knows that are on this machine; none when they could not be listed. */
-export const detectEditors = async (): Promise<DetectedEditor[]> => {
-  try {
-    return await invoke<DetectedEditor[]>("editor_detect");
-  } catch {
-    return [];
   }
 };
 
@@ -114,7 +94,8 @@ export const openInEditor = async (absolutePath: string) => {
     await copyPathInstead(absolutePath, "A browser can't open an editor");
     return;
   }
-  const editor = await readEditor();
+  const { preferences } = await appSettings();
+  const { editor } = preferences;
   try {
     await (editor.kind === "system"
       ? openPath(absolutePath)

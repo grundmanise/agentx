@@ -80,17 +80,41 @@ const load = async (
 /** The label of the control that loads `args`, for `usePending`. */
 export const loadLabel = (args: string[]) => `load ${args.join(" ")}`;
 
-/**
- * Loads the store and its size: `machine`, whose `store` and `store_bytes` the inventory leaves
- * out. Settings calls it each time Storage shows.
- */
-export const loadStore = async () => {
-  await load(["machine"], (events) => {
-    const event = events.find((e) => e.type === "machine");
-    return event === undefined
-      ? {}
-      : { store: { store: event.store, store_bytes: event.store_bytes } };
+// The latest measurement of the store: one that ends after a later one began, or after it was
+// forgotten, writes nothing.
+let measurement = 0;
+
+const measure = async () => {
+  measurement += 1;
+  const mine = measurement;
+  const args = ["machine"];
+  const outcome = await runWhenReady(args, {
+    label: loadLabel(args),
+    sideEffect: false,
   });
+  if (mine !== measurement) {
+    return;
+  }
+  const event = outcome.events.find((e) => e.type === "machine");
+  useAppStore.setState({
+    store:
+      outcome.exitCode === 0 && event !== undefined
+        ? { store: event.store, store_bytes: event.store_bytes }
+        : "unknown",
+  });
+};
+
+/**
+ * Measures the store: `machine`, whose `store` and `store_bytes` the inventory leaves out.
+ * Storage calls it each time it shows. Returns what forgets the measurement, for when Storage
+ * hides: the next time it shows, the store is measured again.
+ */
+export const measureStore = (): (() => void) => {
+  void measure();
+  return () => {
+    measurement += 1;
+    useAppStore.setState({ store: undefined });
+  };
 };
 
 /**

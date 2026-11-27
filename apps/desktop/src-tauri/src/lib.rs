@@ -74,10 +74,30 @@ fn preferences_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .map_err(|err| err.to_string())
 }
 
-/// The app's preferences, or their defaults when none were saved.
+/// What Settings shows of the app itself, in one answer.
+#[derive(serde::Serialize)]
+struct AppSettings {
+    /// The app's preferences, or their defaults when none were saved.
+    preferences: preferences::Preferences,
+    /// The app's version.
+    version: String,
+    /// Whether the app takes nightly builds while the preferences do not say.
+    nightlies_default: bool,
+    /// The editors the app knows that are on this machine, in the order Settings lists them.
+    editors: Vec<editor::Detected>,
+}
+
+/// The app's preferences, its version and the editors on this machine: all that the Editor and
+/// Updates cards of Settings show, so one call fills both.
 #[tauri::command(rename_all = "snake_case")]
-fn preferences_read(app: tauri::AppHandle) -> Result<preferences::Preferences, String> {
-    Ok(preferences::read(&preferences_file(&app)?))
+async fn app_settings(app: tauri::AppHandle, sup: Sup<'_>) -> Result<AppSettings, String> {
+    let version = app.package_info().version.to_string();
+    Ok(AppSettings {
+        preferences: preferences::read(&preferences_file(&app)?),
+        nightlies_default: app_update::is_nightly(&version),
+        version,
+        editors: detected(&sup.login_env().await),
+    })
 }
 
 /// Saves the app's preferences, replacing what was saved. A custom command saved here is a
@@ -89,12 +109,6 @@ fn preferences_write(
     preferences: preferences::Preferences,
 ) -> Result<(), String> {
     preferences::write(&preferences_file(&app)?, &preferences).map_err(|err| err.to_string())
-}
-
-/// The editors the app knows that are on this machine, in the order Settings lists them.
-#[tauri::command(rename_all = "snake_case")]
-async fn editor_detect(sup: Sup<'_>) -> Result<Vec<editor::Detected>, String> {
-    Ok(detected(&sup.login_env().await))
 }
 
 fn detected(env: &HashMap<String, String>) -> Vec<editor::Detected> {
@@ -185,9 +199,8 @@ pub fn run() {
             serve_request,
             serve_log_path,
             serve_verbose,
-            preferences_read,
+            app_settings,
             preferences_write,
-            editor_detect,
             editor_open,
             app_update::app_update_check,
             app_update::app_update_install,

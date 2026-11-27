@@ -19,12 +19,13 @@ const thisMachine = (label = machineLabel): Machine => ({
   settings_file: `${HOME}/settings.json`,
 });
 
-/** `machine`: this machine with the store and its size. */
-export const machine = (): Omit<MachineEvent, "schema_version"> => ({
+/** `machine`: this machine with the store and its size, 1.5 MiB unless `bytes` says. */
+export const machine = (
+  bytes = 1_572_864
+): Omit<MachineEvent, "schema_version"> => ({
   ...thisMachine(),
   store: STORE,
-  // 1.5 MiB.
-  store_bytes: 1_572_864,
+  store_bytes: bytes,
   type: "machine",
 });
 
