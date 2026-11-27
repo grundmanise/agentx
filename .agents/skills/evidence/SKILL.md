@@ -1,6 +1,6 @@
 ---
-name: screenshots
-description: "Use when taking screenshots or recordings of the desktop app, such as visual evidence for a PR."
+name: evidence
+description: "Use when taking screenshots or recordings of the desktop app as evidence, such as for a PR."
 ---
 
 Take screenshots and recordings in browser mode: the app runs in a browser against the real `agentx serve`, inside a container, on a home built from a machine preset. Never run the app, serve or a preset on the host, even on a Mac.
