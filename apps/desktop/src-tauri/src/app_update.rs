@@ -39,6 +39,12 @@ pub fn manifest_urls(version: &str, nightlies: bool) -> Vec<&'static str> {
     }
 }
 
+/// Whether `version` is a nightly build's, which takes nightly builds unless the Include nightly
+/// builds preference says otherwise.
+pub fn is_nightly(version: &str) -> bool {
+    version.contains("-nightly.")
+}
+
 /// The update of the newest version, or none.
 fn newest(updates: Vec<Update>) -> Option<Update> {
     updates.into_iter().max_by(|a, b| {
@@ -183,5 +189,12 @@ mod tests {
             manifest_urls("0.3.0-nightly.20261001.42", true),
             vec![STABLE, NIGHTLY]
         );
+    }
+
+    #[test]
+    fn a_nightly_build_is_known_by_its_version() {
+        assert!(is_nightly("0.3.0-nightly.20261001.42"));
+        assert!(!is_nightly("0.3.0"));
+        assert!(!is_nightly("0.0.0"));
     }
 }

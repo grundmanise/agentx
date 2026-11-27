@@ -17,7 +17,6 @@ const WRITE_AFTER_MS = 500;
 const SLICES = [
   "adoption",
   "inventory",
-  "store",
 ] as const satisfies readonly (keyof AppState)[];
 
 type Slices = Pick<AppState, (typeof SLICES)[number]>;
@@ -30,7 +29,6 @@ interface Kept extends Slices {
 const slicesOf = (s: AppState): Slices => ({
   adoption: s.adoption,
   inventory: s.inventory,
-  store: s.store,
 });
 
 /** Whether this build wrote `item`: it then holds this build's own store. */

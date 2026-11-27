@@ -17,6 +17,7 @@ import { StartupLayer } from "#/app/startup-layer.tsx";
 import { TelemetryDialog } from "#/app/telemetry-dialog.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/ui/sonner.tsx";
+import { readAppSettings } from "#/lib/app-settings.ts";
 import { setNavigate } from "#/lib/navigate.ts";
 import { viewScreen } from "#/lib/telemetry.ts";
 import { cn } from "#/lib/utils.ts";
@@ -107,8 +108,10 @@ export const App = () => {
     setPaletteOpen(false);
   }
 
+  // The app's own settings are read with the launch, so Settings shows them the moment it opens.
   useEffect(() => {
     launch();
+    void readAppSettings();
   }, []);
 
   // The store loads its slices once the checks pass: nothing runs a command before they do.

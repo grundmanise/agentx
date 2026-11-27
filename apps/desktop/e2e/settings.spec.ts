@@ -1,12 +1,14 @@
 // The Settings page: This machine (the label, saved with `config set label`, and the machine id),
-// Comparing edits (`config set ignore_system_files`), Storage (the library's path and the home
-// repo's size from `machine`) and Command line (the versions and Run checks). Every row reads the
-// store, whose machine and settings come with the inventory, and every control runs exactly its
-// command.
+// Comparing edits (`config set ignore_system_files`), Storage (the library's and the store's
+// paths, and the store's size from `machine`) and Command line (the versions and Run checks).
+// Every row reads the store, whose machine and settings come with the inventory, and every
+// control runs exactly its command. The Editor and Updates cards fill from one read of the app's
+// own settings.
 import type { Page } from "@playwright/test";
 
 import {
   MACHINE_ID,
+  STORE,
   inventoryWith,
   machine,
   scanned,
@@ -21,12 +23,18 @@ import {
 } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
+declare global {
+  interface Window {
+    appRowsSeen?: string[];
+  }
+}
+
 const launchLines = [
   ["version", "--json"],
   ["doctor", "--json"],
 ];
 
-/** The read of the store and its size, which Settings runs each time it shows. */
+/** The measurement of the store, which Settings runs each time it shows. */
 const storeLines = [["machine", "--json"]];
 
 const isLaunchOrLoad = (line: string[]) =>
@@ -81,7 +89,7 @@ test("each card shows what the store holds", async ({ cli, page }) => {
   );
   await expect(thisMachine).toContainText(MACHINE_ID);
   await expect(thisMachine).toContainText(`Library${libraryPath}`);
-  await expect(thisMachine).toContainText("Store1.5 MiB");
+  await expect(thisMachine).toContainText(`Store1.5 MiB${STORE}`);
 
   await expect(section(page, "Hub")).toContainText(
     ".DS_Store, Thumbs.db and editor backups never count as edits. A skill's own .gitignore always applies."
@@ -103,12 +111,86 @@ test("each card shows what the store holds", async ({ cli, page }) => {
 });
 
 test("a store not created yet says so", async ({ cli, page }) => {
-  const { store: _, store_bytes: __, ...fresh } = machine();
-  cli.register(["machine"], { events: [fresh] });
+  cli.onServeStart({ events: [inventoryWith({ store: false })] });
   await page.goto("/#/settings");
   await expect(section(page, "This machine")).toContainText(
     "StoreNot created yet"
   );
+});
+
+test("the store's path shows at once, and its size says Measuring until each measurement ends", async ({
+  cli,
+  page,
+}) => {
+  cli.onServeStart({ events: [inventoryWith()] });
+  const first = cli.register(["machine"], {
+    events: [machine()],
+    holdAfter: 0,
+  });
+  await page.goto("/#/settings");
+  await first.started;
+  const thisMachine = section(page, "This machine");
+  await expect(thisMachine).toContainText(`StoreMeasuring…${STORE}`);
+  first.release();
+  await expect(thisMachine).toContainText(`Store1.5 MiB${STORE}`);
+
+  // Shown again, Settings measures again and shows no size from the time before.
+  const second = cli.register(["machine"], {
+    events: [machine(3 * 1024 * 1024)],
+    holdAfter: 0,
+  });
+  await page.getByRole("link", { name: "Skills" }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
+  await second.started;
+  await expect(thisMachine).toContainText(`StoreMeasuring…${STORE}`);
+  second.release();
+  await expect(thisMachine).toContainText(`Store3.0 MiB${STORE}`);
+});
+
+test("the Editor and Updates rows show together with the inventory's, from one read each time Settings shows", async ({
+  cli,
+  page,
+}) => {
+  // Each set of rows the page held, in order, as the page changed: the two cards' rows, and the
+  // label, which the inventory fills.
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    window.appRowsSeen = seen;
+    new MutationObserver(() => {
+      const rows = {
+        automaticChecks: '[aria-label="Automatic update checks"]',
+        editor: '[role="radiogroup"][aria-label="Editor"]',
+        label: '[aria-label="Machine label"]',
+        nightlies: '[aria-label="Include nightly builds"]',
+        openAfterCreate: '[aria-label="Open editor after creating a skill"]',
+        version:
+          '[data-ph-capture-attribute-action="settings.check-updates-now"]',
+      };
+      const shown = Object.entries(rows)
+        .filter(([, row]) => document.querySelector(row) !== null)
+        .map(([name]) => name)
+        .join(" ");
+      if (seen.at(-1) !== shown) {
+        seen.push(shown);
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  await openSettings(cli, page);
+  await expect(
+    section(page, "Updates").getByRole("switch", {
+      name: "Include nightly builds",
+    })
+  ).toBeVisible();
+  expect(await page.evaluate(() => window.appRowsSeen)).toEqual([
+    "",
+    "automaticChecks editor label nightlies openAfterCreate version",
+  ]);
+  const reads = () => cli.calls.filter((c) => c === "app_settings").length;
+  const before = reads();
+
+  await page.getByRole("link", { name: "Skills" }).click();
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect.poll(reads).toBe(before + 1);
 });
 
 test("Enter with a new label runs config set label and toasts; the field shows the label of the next inventory", async ({

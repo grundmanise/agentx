@@ -4,7 +4,7 @@
 // lists it. With Open editor after creating a skill on (Settings, Editor), it then opens its
 // SKILL.md in the editor the user chose; off, the Created toast offers Open editor. A name the CLI
 // refuses (exit 6: taken, or outside the grammar) shows its message under Name.
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent } from "#/cli/events.gen.ts";
@@ -22,7 +22,8 @@ import {
 import { Input } from "#/components/ui/input.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { doctorRule, rewriteHint } from "#/lib/app-hint.ts";
-import { openInEditor, readOpenAfterCreate } from "#/lib/editor.ts";
+import { useAppSettings } from "#/lib/app-settings.ts";
+import { openInEditor } from "#/lib/editor.ts";
 import {
   breaksSkillNameRule,
   isSkillName,
@@ -112,19 +113,7 @@ const CreateSkillForm = ({ onClose }: { onClose: () => void }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [refusal, setRefusal] = useState<Refusal | undefined>();
-  const [opens, setOpens] = useState(false);
-  useEffect(() => {
-    let current = true;
-    void (async () => {
-      const on = await readOpenAfterCreate();
-      if (current) {
-        setOpens(on);
-      }
-    })();
-    return () => {
-      current = false;
-    };
-  }, []);
+  const opens = useAppSettings((s) => s.preferences.open_after_create) ?? false;
   // Create is pending while `skill new` runs and, once it created the skill, until the inventory
   // that follows lists it. A refusal changed nothing, so it waits for no inventory.
   const running = usePending(CREATE_SKILL_LABEL);

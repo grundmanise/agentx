@@ -1,5 +1,6 @@
 // The machine the Settings and telemetry tests run against: this machine and its settings as the
-// inventory lists them, and its `machine` event with the store and its size, which Storage reads.
+// inventory lists them, the store among them, and its `machine` event with the store's size,
+// which Storage reads.
 import type { Machine, MachineEvent } from "#/cli/events.gen.ts";
 
 import { firstInventory, libraryPath, machineLabel } from "../harness/cli.ts";
@@ -17,44 +18,50 @@ const thisMachine = (label = machineLabel): Machine => ({
   label,
   library: libraryPath,
   settings_file: `${HOME}/settings.json`,
+  store: STORE,
 });
 
-/** `machine`: this machine with the store and its size. */
-export const machine = (): Omit<MachineEvent, "schema_version"> => ({
+/** `machine`: this machine with the store's size, 1.5 MiB unless `bytes` says. */
+export const machine = (
+  bytes = 1_572_864
+): Omit<MachineEvent, "schema_version"> => ({
   ...thisMachine(),
-  store: STORE,
-  // 1.5 MiB.
-  store_bytes: 1_572_864,
+  store_bytes: bytes,
   type: "machine",
 });
 
 /**
  * An inventory of this machine, with its label, `ignore_system_files` and `telemetry` as given,
- * the anonymous id `anonymousId` names, if any, and `scanCounter` as its scan counter.
+ * the anonymous id `anonymousId` names, if any, and `scanCounter` as its scan counter. With
+ * `store` false, the store is not created yet.
  */
 export const inventoryWith = ({
   anonymousId,
   ignore = true,
   label = machineLabel,
   scanCounter = 1,
+  store = true,
   telemetry,
 }: {
   anonymousId?: string;
   ignore?: boolean;
   label?: string;
   scanCounter?: number;
+  store?: boolean;
   telemetry?: "on" | "off";
-} = {}) =>
-  ({
+} = {}) => {
+  const { store: _, ...notCreated } = thisMachine(label);
+  return {
     ...firstInventory(),
-    machine: thisMachine(label),
+    machine: store ? thisMachine(label) : notCreated,
     scan_counter: scanCounter,
     settings: {
       ignore_system_files: ignore,
       ...(telemetry === undefined ? {} : { telemetry }),
       ...(anonymousId === undefined ? {} : { anonymous_id: anonymousId }),
     },
-  }) satisfies InlineEvent;
+  } satisfies InlineEvent;
+};
 
 /** Sends the inventory that follows a command and answers every refresh request, as serve does. */
 export const scanned = async (

@@ -236,8 +236,8 @@ const sequence = async () => {
       return;
     }
 
-    // Both read the machine and neither waits for the other: doctor's rows count only once the
-    // version is known.
+    // Both read the machine and neither waits for the other. A version that is known shows with
+    // doctor's rows, in one update: Settings shows the CLI's version and git's as one line.
     nextStep();
     const versioning = oneShot(["version"]);
     const checking = oneShot(["doctor"]);
@@ -258,11 +258,14 @@ const sequence = async () => {
       });
       return;
     }
-    found({ version: { cliVersion: cliVersion.cli_version } });
+    const known = { cliVersion: cliVersion.cli_version };
 
     const doctor = await checking;
     if ("error" in doctor) {
-      found({ doctor: { error: doctor.error, exitCode: null, rows: [] } });
+      found({
+        doctor: { error: doctor.error, exitCode: null, rows: [] },
+        version: known,
+      });
       return;
     }
     const rows = doctor.events.filter(
@@ -283,6 +286,7 @@ const sequence = async () => {
               ),
             }),
       },
+      version: known,
     });
     if (readChecks(findings, false).failure !== undefined) {
       return;

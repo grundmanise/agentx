@@ -2,20 +2,16 @@
 // the Skills detail pane). One choice: System default, each editor found on this machine, or a
 // custom command line, to which the file's path is added. Then the Open editor after creating a
 // skill switch: off, the Created toast offers Open editor instead. Both are the app's own
-// preferences, which `src/lib/editor.ts` reads and saves; no CLI command runs, and no setting of
-// the CLI changes.
-import { useEffect, useId, useState } from "react";
+// preferences, which come with the app's settings (`src/lib/app-settings.ts`), as the editors
+// found do, and which `src/lib/editor.ts` saves; no CLI command runs, and no setting of the CLI
+// changes.
+import { useId, useState } from "react";
 
 import { Input } from "#/components/ui/input.tsx";
 import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
-import {
-  detectEditors,
-  readEditor,
-  readOpenAfterCreate,
-  saveEditor,
-  saveOpenAfterCreate,
-} from "#/lib/editor.ts";
+import { useAppSettings } from "#/lib/app-settings.ts";
+import { saveEditor, saveOpenAfterCreate } from "#/lib/editor.ts";
 import type { DetectedEditor, EditorChoice } from "#/lib/editor.ts";
 import { SettingsCard, SettingsRow } from "#/screens/settings/section.tsx";
 
@@ -53,28 +49,22 @@ const listed = (
     : found;
 
 const EditorChoices = ({
-  initial,
+  editor,
   found,
 }: {
-  initial: EditorChoice;
+  editor: EditorChoice;
   found: DetectedEditor[];
 }) => {
-  const [editor, setEditor] = useState(initial);
   // What the Custom command field holds, kept while another choice is made.
   const [command, setCommand] = useState(
-    initial.kind === "custom" ? initial.command : ""
+    editor.kind === "custom" ? editor.command : ""
   );
   const hintId = useId();
   const editors = listed(found, editor);
 
-  const choose = (next: EditorChoice) => {
-    setEditor(next);
-    void saveEditor(next);
-  };
-
   const saveCommand = () => {
     if (editor.kind === "custom" && editor.command !== command.trim()) {
-      choose({ command: command.trim(), kind: "custom" });
+      void saveEditor({ command: command.trim(), kind: "custom" });
     }
   };
 
@@ -85,16 +75,16 @@ const EditorChoices = ({
         value={valueOf(editor)}
         onValueChange={(value) => {
           if (value === "system") {
-            choose({ kind: "system" });
+            void saveEditor({ kind: "system" });
             return;
           }
           if (value === "custom") {
-            choose({ command: command.trim(), kind: "custom" });
+            void saveEditor({ command: command.trim(), kind: "custom" });
             return;
           }
           const app = editors.find((e) => `app:${e.id}` === value);
           if (app !== undefined) {
-            choose({ id: app.id, kind: "app", name: app.name });
+            void saveEditor({ id: app.id, kind: "app", name: app.name });
           }
         }}
       >
@@ -148,8 +138,7 @@ const EditorChoices = ({
   );
 };
 
-const OpenAfterCreate = ({ initial }: { initial: boolean }) => {
-  const [checked, setChecked] = useState(initial);
+const OpenAfterCreate = ({ checked }: { checked: boolean }) => {
   const id = useId();
   return (
     <SettingsRow
@@ -162,12 +151,7 @@ const OpenAfterCreate = ({ initial }: { initial: boolean }) => {
           aria-label="Open editor after creating a skill"
           checked={checked}
           onCheckedChange={(on) => {
-            setChecked(on);
-            void (async () => {
-              if (!(await saveOpenAfterCreate(on))) {
-                setChecked(!on);
-              }
-            })();
+            void saveOpenAfterCreate(on);
           }}
         />
       }
@@ -176,38 +160,18 @@ const OpenAfterCreate = ({ initial }: { initial: boolean }) => {
 };
 
 export const EditorCard = () => {
-  const [read, setRead] = useState<
-    | {
-        editor: EditorChoice;
-        found: DetectedEditor[];
-        openAfterCreate: boolean;
-      }
-    | undefined
-  >();
-  useEffect(() => {
-    let current = true;
-    void (async () => {
-      const [editor, found, openAfterCreate] = await Promise.all([
-        readEditor(),
-        detectEditors(),
-        readOpenAfterCreate(),
-      ]);
-      if (current) {
-        setRead({ editor, found, openAfterCreate });
-      }
-    })();
-    return () => {
-      current = false;
-    };
-  }, []);
+  const settings = useAppSettings((s) => s);
   return (
     <SettingsCard title="Editor">
-      {read !== undefined && (
+      {settings !== undefined && (
         <>
           <SettingsRow>
-            <EditorChoices initial={read.editor} found={read.found} />
+            <EditorChoices
+              editor={settings.preferences.editor}
+              found={settings.editors}
+            />
           </SettingsRow>
-          <OpenAfterCreate initial={read.openAfterCreate} />
+          <OpenAfterCreate checked={settings.preferences.open_after_create} />
         </>
       )}
     </SettingsCard>

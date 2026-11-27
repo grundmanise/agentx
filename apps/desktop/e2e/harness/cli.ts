@@ -168,6 +168,7 @@ export const thisMachine = {
   label: machineLabel,
   library: libraryPath,
   settings_file: "/home/me/.agentx/settings.json",
+  store: "/home/me/.agentx/store.git",
 } as const;
 
 /** The serve log file on the machine a passing launch reports. */
@@ -838,22 +839,21 @@ export class MockCli {
         this.serveVerbose.push(field(args, "on") === true);
         return null;
       }
-      case "editor_detect": {
-        return this.editors;
-      }
       case "set_telemetry": {
         this.telemetryTold.push(args);
         return null;
       }
-      case "preferences_read": {
-        return this.preferences;
+      case "app_settings": {
+        return {
+          editors: this.editors,
+          nightlies_default: this.appVersion.includes("-nightly."),
+          preferences: this.preferences,
+          version: this.appVersion,
+        };
       }
       case "preferences_write": {
         this.preferences = field(args, "preferences");
         return null;
-      }
-      case "plugin:app|version": {
-        return this.appVersion;
       }
       case "app_update_check": {
         this.appUpdateChecks += 1;

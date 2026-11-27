@@ -102,7 +102,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `settings_file` | string | the machine settings file, `settings.json` in agentx home (see [Machine settings](#machine-settings)) |
 | `library` | string | the library, as `AGENTX_LIBRARY` resolved it |
 | `store` | string | the store, `store.git` in agentx home; absent until it is created (see [Store](#store)) |
-| `store_bytes` | integer | the size on disk of the store: the sizes of the regular files under `store.git` added up, read without a git process, a symlink counting nothing and never followed. A fork's worktree lies under `worktrees/` in agentx home, outside the repository, so what it holds is not counted. Absent with `store` |
+| `store_bytes` | integer | the size on disk of the store: the sizes of the regular files under `store.git` added up, read without a git process, a symlink counting nothing and never followed. A fork's worktree lies under `worktrees/` in agentx home, outside the repository, so what it holds is not counted. Absent with `store`, and from the inventory's `machine` |
 
 `source`, emitted by every `agentx source` command, one per source (see [Sources](#sources)), the hub included (see [Hub](#hub)), by `agentx skill add` for the source it installs from, by `agentx skill add` with no source for the upstream source of a skill it installs from the hub, when it adds one (see **Installing from the hub** under [Hub](#hub)), and by `agentx snapshot apply`, one per source of the settings it adds, the hub included (see **Applying** under [Snapshots](#snapshots)). The `sources` field of the [inventory](#inventory) holds one per source, as `source list` emits it:
 
@@ -585,7 +585,7 @@ The event:
 |---|---|---|
 | `instance_id` | string | fresh per process, or `AGENTX_INSTANCE_ID` |
 | `scan_counter` | integer | `1` for a one-shot scan |
-| `machine` | object | this machine: the [`machine`](#event-types) event `agentx machine` emits, without `type` and `schema_version`, and without `store` and `store_bytes`: every git write changes the size, and a scan reports no change of it |
+| `machine` | object | this machine: the [`machine`](#event-types) event `agentx machine` emits, without `type` and `schema_version`, and without `store_bytes`: every git write changes the size, and a scan reports no change of it |
 | `settings` | object | the machine settings no other field carries: `ignore_system_files`, and `telemetry`, absent until answered (see [Machine settings](#machine-settings)), with `anonymous_id`, the [anonymous id](#telemetry), present exactly when `telemetry` is `on` and `DO_NOT_TRACK` is unset, as the `settings` event carries it. The label is in `machine`, the sources in `sources`, the disabled and copy configurations in each configuration's `enabled` and `placement`, and `copy_mode` in each library placement's `mode` |
 | `sources` | array | one object per source of the settings, in their order, the hub included: the [`source`](#event-types) event `agentx source list` emits for it, every field and nothing else, without `type` and `schema_version`; `[]` when the settings hold none. Its `commit` and `skills` are left out when git cannot read the store, which a warning then says, unless the `library` warning already names the store |
 | `configurations` | array | the detected configurations, sorted by `id` |

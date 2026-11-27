@@ -12,7 +12,6 @@ import type {
   HistoryEvent,
   InstallableSkillEvent,
   InventoryEvent,
-  MachineEvent,
   SkillFileEvent,
   Source,
   SourceSkillEvent,
@@ -78,10 +77,11 @@ export interface AppState {
    */
   lastChecked: string | undefined;
   /**
-   * The store and its size on disk, from `machine`, read when Settings shows Storage: the
-   * inventory leaves them out, since every git write changes the size. Undefined before a read.
+   * The store's size on disk in bytes, from `machine`, measured each time Settings shows Storage:
+   * the inventory leaves it out, since every git write changes it. Undefined while it is
+   * measured, "unknown" when it could not be.
    */
-  store: Pick<MachineEvent, "store" | "store_bytes"> | undefined;
+  storeBytes: number | "unknown" | undefined;
   /** Whether the telemetry question was answered this session: it is not asked again. */
   telemetryAnswered: boolean;
   /** What `skill import` would take over, from its preview. */
@@ -188,7 +188,7 @@ export const useAppStore = create<AppState>()(() => ({
   serveEnd: undefined,
   serveError: undefined,
   skillMds: {},
-  store: undefined,
+  storeBytes: undefined,
   telemetryAnswered: false,
   updateDiffs: {},
 }));
