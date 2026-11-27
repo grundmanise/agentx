@@ -204,7 +204,8 @@ const table: BannerRule[] = [
   },
   {
     banner: (row) => {
-      const tool = row.adoption === undefined ? "" : toolName(row.adoption);
+      const tool =
+        row.recorded === undefined ? "" : toolName(row.recorded.tool);
       return {
         action: { kind: "adopt" },
         coversOrigin: true,
@@ -213,7 +214,8 @@ const table: BannerRule[] = [
         tone: "neutral",
       };
     },
-    when: (row) => row.adoption?.state === "candidate",
+    when: (row) =>
+      row.recorded !== undefined && row.recorded.refusal === undefined,
   },
   {
     // An unmanaged skill no tool recorded.
@@ -230,7 +232,7 @@ const table: BannerRule[] = [
     banner: (row) => {
       const result = importOf(row);
       const why = result !== undefined && "why" in result ? result : undefined;
-      const refused = row.adoption?.state === "refused";
+      const refused = row.recorded?.refusal !== undefined;
       return {
         action:
           why?.inTheWay === undefined
@@ -239,9 +241,9 @@ const table: BannerRule[] = [
         coversOrigin: refused,
         text: why?.why,
         title:
-          refused && row.adoption !== undefined
-            ? `Added by ${toolName(row.adoption)}`
-            : "Not managed by agentx",
+          row.recorded?.refusal === undefined
+            ? "Not managed by agentx"
+            : `Added by ${toolName(row.recorded.tool)}`,
         tone: "neutral",
       };
     },

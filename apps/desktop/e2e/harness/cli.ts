@@ -17,11 +17,10 @@
 //
 // The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
 // passing launch: `version` and `doctor` replies, and a serve child that writes its first inventory
-// when it starts, which the first command does. Once the checks pass the store loads its slices
-// (src/store/loaders.ts), so the mock answers the adoption preview, `skill import`, too. This
-// machine, its settings and its sources come in the inventory: serveEmit fills in this machine,
-// the default settings and no sources unless the test's inventory says otherwise. A test replaces
-// any reply with register() and onServeStart().
+// when it starts, which the first command does. This machine, its settings, its sources and the
+// skills another tool installed come in the inventory: serveEmit fills in this machine, the
+// default settings, no sources and no such skills unless the test's inventory says otherwise. A
+// test replaces any reply with register() and onServeStart().
 //
 // The mock also answers the native open dialog of Tauri's dialog plugin with the path a test gives
 // answerOpenDialog(), or with null, a Cancel, until one does, and records every Tauri call in `calls`.
@@ -153,9 +152,6 @@ export const passingDoctor: InlineEvent[] = [
     type: "doctor",
   },
 ];
-
-/** The reads the store runs once the checks pass (src/store/loaders.ts), with --json. */
-export const loadLines = [["skill", "import", "--json"]];
 
 /** The library on the machine a passing launch reports. */
 export const libraryPath = "/home/me/.agents/skills";
@@ -408,7 +404,6 @@ export class MockCli {
       events: [{ cli_version: cliVersion, type: "version" }],
     });
     this.register(["doctor"], { events: passingDoctor });
-    this.register(["skill", "import"]);
     this.register(["machine"], {
       events: [{ ...thisMachine, type: "machine" }],
     });
@@ -572,6 +567,7 @@ export class MockCli {
             event: full(
               event.type === "inventory"
                 ? {
+                    adoptable: [],
                     configurations: [],
                     edges: [],
                     installs: [],

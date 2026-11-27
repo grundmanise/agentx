@@ -2,7 +2,7 @@
 // shows, the configurations that see them, and the history of a hub skill. Inline
 // events with only the fields the tests check, typed by the generated event types.
 import type {
-  AdoptionEvent,
+  Adoptable,
   Configuration,
   DiffEvent,
   HistoryEvent,
@@ -262,8 +262,12 @@ export const plugins: Plugin[] = [
   },
 ];
 
+/** What `skill import` can adopt: the unmanaged library skill the Skills CLI installed. */
+export const adoptable: Adoptable[] = [{ skills: ["scratch"], tool: "vercel" }];
+
 /** The serve child's first inventory on this machine. */
 export const inventory = {
+  adoptable,
   configurations,
   library,
   plugins,
@@ -271,20 +275,6 @@ export const inventory = {
   skills,
   type: "inventory",
 } satisfies InlineEvent;
-
-/** What `skill import` would take over: the unmanaged library skill the Skills CLI installed. */
-export const adoption: AdoptionEvent[] = [
-  {
-    file: "/home/me/.agents/.skill-lock.json",
-    name: "scratch",
-    schema_version: 5,
-    source: "https://github.com/vercel/skills",
-    state: "candidate",
-    subpath: "scratch",
-    tool: "vercel",
-    type: "adoption",
-  },
-];
 
 const historyEvent = (
   commit: string,

@@ -32,8 +32,9 @@ type Inventory struct {
 	Sources        []Source        `json:"sources"`  // filled in by the caller, from the machine settings and the store
 	Configurations []Configuration `json:"configurations"`
 	Skills         []Skill         `json:"skills"`
-	Library        []LibraryEntry  `json:"library"`  // filled in by the caller, which reads the lineage
-	Installs       []home.Install  `json:"installs"` // filled in by the caller, as installs.json holds them
+	Library        []LibraryEntry  `json:"library"`   // filled in by the caller, which reads the lineage
+	Installs       []home.Install  `json:"installs"`  // filled in by the caller, as installs.json holds them
+	Adoptable      []Adoptable     `json:"adoptable"` // filled in by the caller, from the other tools' install records
 	MCPServers     []Server        `json:"mcp_servers"`
 	Plugins        []Plugin        `json:"plugins"`
 	Edges          []Edge          `json:"edges"`
@@ -166,6 +167,24 @@ type LibraryEntry struct {
 	Universal       []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
 }
 
+// Adoptable is what one other tool installed on this machine that agentx
+// does not manage, as agentx skill import judges that tool's install
+// records: the skills it can adopt and the ones it cannot. A skill agentx
+// manages already is in neither list. They are facts only: matching a name
+// to a library entry or to a skill node is the reader's.
+type Adoptable struct {
+	Tool    string            `json:"tool"`              // the tool whose records name them: vercel or skillshare
+	Skills  []string          `json:"skills"`            // the names of the skills an import can adopt, sorted
+	Refused []RefusedAdoption `json:"refused,omitempty"` // the skills an import cannot adopt, sorted by name
+}
+
+// RefusedAdoption is one skill another tool installed that agentx skill
+// import cannot adopt.
+type RefusedAdoption struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"` // what is in the way, as a code
+}
+
 // LibraryCandidate is the update the last update check found for a managed
 // skill or a fork: the newer upstream version its candidate ref pins, by
 // the upstream commit and the content hash that version's import commit
@@ -284,6 +303,7 @@ func Read(o Options) *Scan {
 			Skills:         []Skill{},
 			Library:        []LibraryEntry{},
 			Installs:       []home.Install{},
+			Adoptable:      []Adoptable{},
 			MCPServers:     []Server{},
 			Plugins:        []Plugin{},
 			Edges:          []Edge{},

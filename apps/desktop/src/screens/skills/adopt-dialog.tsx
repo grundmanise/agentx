@@ -1,5 +1,5 @@
 // The adopt dialog: what adopting the skills of one tool, or of both, would do, the skills it
-// covers by name, the ones the preview refuses folded under the list with the CLI's reason, then
+// covers by name, the ones `skill import` refuses folded under the list with the reason, then
 // Cancel · Import. Import runs in the dialog (`adopt.ts`): each row shows its state, then its result,
 // with the reason of a skill the CLI did not adopt; one line counts the skills started, then says
 // how many were adopted. While the run goes, only Cancel closes the dialog, and it stops the run;
@@ -168,8 +168,8 @@ const Rows = ({
 );
 
 /**
- * The skills the preview refused, folded under the list behind one line that counts them; opened,
- * each shows the CLI's reason, in a list that scrolls past its height.
+ * The skills `skill import` refuses, folded under the list behind one line that counts them;
+ * opened, each shows the reason, in a list that scrolls past its height.
  */
 const Refused = ({ rows }: { rows: AdoptRow[] }) => {
   const [open, setOpen] = useState(false);
@@ -239,7 +239,7 @@ const titleOf = (tools: readonly { name: string }[]) =>
 
 /**
  * The adopt dialog for `tools`, the `--from` values of `skill import` it covers, in the app's
- * order. Before the run it reads the preview; from Adopt on, the run's own rows.
+ * order. Before the run it shows the inventory's skills; from Adopt on, the run's own rows.
  */
 export const AdoptDialog = ({
   tools: wanted,
@@ -250,9 +250,9 @@ export const AdoptDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const adoption = useAppStore((s) => s.adoption);
+  const adoptable = useAppStore((s) => s.inventory?.adoptable);
   const run = useAdoptRun((s) => s.run);
-  const records = toolsToAdopt(adoption).filter((t) => wanted.includes(t.arg));
+  const records = toolsToAdopt(adoptable).filter((t) => wanted.includes(t.arg));
   // Once Adopt is pressed, the dialog shows the run: its tools and rows as they were then.
   const tools = run?.tools ?? summariesOf(records);
   const rows = run?.rows ?? rowsOf(records);

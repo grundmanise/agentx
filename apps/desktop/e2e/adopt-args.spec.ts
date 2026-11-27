@@ -3,7 +3,8 @@
 import { expect, test } from "@playwright/test";
 
 import type {
-  AdoptionEvent,
+  Adoptable,
+  AdoptionRefusal,
   InventoryEvent,
   SkillNode,
 } from "#/cli/events.gen.ts";
@@ -14,18 +15,12 @@ import { inventory as refusedInventory } from "./fixtures/adoption.ts";
 import { inventory, linked, meetingNotes } from "./fixtures/skills.ts";
 import { thisMachine } from "./harness/cli.ts";
 
-/** The record the Skills CLI keeps of `name`, in the `state` the adoption preview gives it. */
-const record = (
-  name: string,
-  state: AdoptionEvent["state"]
-): AdoptionEvent => ({
-  file: "/home/me/.agents/.skill-lock.json",
-  name,
-  schema_version: 5,
-  state,
-  tool: "vercel",
-  type: "adoption",
-});
+/** What the inventory says of `name`, which the Skills CLI installed: to adopt, or refused for `reason`. */
+const recorded = (name: string, reason?: AdoptionRefusal): Adoptable[] => [
+  reason === undefined
+    ? { skills: [name], tool: "vercel" }
+    : { refused: [{ name, reason }], skills: [], tool: "vercel" },
+];
 
 /** A skill node with one occurrence in Cursor: `fields` say its path, kind and scope. */
 const inCursor = (
@@ -61,10 +56,10 @@ const inProject = inCursor("project-notes", {
 /** Cursor's own directory whose name reads as a flag. */
 const dashed = inCursor("--all", {});
 
-/** The row `key` names on the fixture machine with `more` skills, by the adoption preview `records`. */
+/** The row `key` names on the fixture machine with `more` skills, where the inventory lists `adoptable`. */
 const rowOf = (
   key: string,
-  records: AdoptionEvent[],
+  adoptable: Adoptable[],
   machine: Pick<
     InventoryEvent,
     "configurations" | "library" | "plugins" | "skills"
@@ -84,12 +79,10 @@ const rowOf = (
     type: "inventory",
     warnings: [],
     ...machine,
+    adoptable,
     skills: [...machine.skills, ...more],
   };
-  const rows = projectRows({
-    adoption: records,
-    inventory: whole,
-  });
+  const rows = projectRows({ inventory: whole });
   const row = rows.find((r) => r.key === key);
   if (row === undefined) {
     throw new Error(`no row ${key}`);
@@ -105,7 +98,7 @@ const table: [
 ][] = [
   [
     "a library skill another tool recorded",
-    rowOf("scratch", [record("scratch", "candidate")]),
+    rowOf("scratch", recorded("scratch")),
     ["skill", "import", "scratch"],
   ],
   [
@@ -115,13 +108,8 @@ const table: [
   ],
   [
     "a library skill whose record the CLI refuses",
-    rowOf("legacy", [record("legacy", "refused")], refusedInventory),
-    "It can't be imported",
-  ],
-  [
-    "a library skill whose record says agentx manages it",
-    rowOf("scratch", [record("scratch", "managed")]),
-    "agentx already manages it",
+    rowOf("legacy", recorded("legacy", "symlink"), refusedInventory),
+    "It's a link",
   ],
   [
     "a directory in a client's own skills directory",

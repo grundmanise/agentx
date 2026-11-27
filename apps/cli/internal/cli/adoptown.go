@@ -336,60 +336,65 @@ func symlinkRefusal(name, link string) (reason string, f *failure) {
 // can install it from, cannot be adopted with its files as they are: nil
 // when this machine holds a folder of it to adopt, the library's, or,
 // where the library holds nothing under the name, one in an agent client's
-// own skills directory. reason is the refusal as a row of a preview says
-// it, without the skill's name; the failure is how a run asked to adopt it
-// answers. managed says an import branch holds the name, whose skill the
+// own skills directory. code is the refusal as an inventory names it;
+// reason is the refusal as a row of a preview says it, without the skill's
+// name; the failure is how a run asked to adopt it answers. managed says an import branch holds the name, whose skill the
 // library no longer holds as a folder. It reads the machine and writes
 // nothing, as the preview that asks does; what else can refuse the
-// adoption, see checkForking, is found when it runs.
-func (inv *invocation) asItIsRefusal(rec record, managed bool) (reason string, f *failure) {
+// adoption, see checkForking, is found when it runs. sites finds what the
+// agent clients' own skills directories hold under the name.
+func (inv *invocation) asItIsRefusal(rec record, managed bool, sites siteFinder) (code, reason string, f *failure) {
 	name, libPath := rec.name, inv.libraryPath(rec.name)
 	shown, again := sanitised(name), "run '"+adoptCommand(rec.name)+"' again"
-	refused := func(reason, message, hint string) (string, *failure) {
-		return reason, refuse(exitRefused, message, hint).listed(reason)
+	refused := func(code, reason, message, hint string) (string, string, *failure) {
+		return code, reason, refuse(exitRefused, message, hint).listed(reason)
+	}
+	symlink := func(link string) (string, string, *failure) {
+		reason, f := symlinkRefusal(name, link)
+		return refusedSymlink, reason, f
 	}
 	if managed {
 		remove := "'" + skillCommand("remove", name) + "'"
-		return refused("agentx already manages a skill of this name, whose folder "+quotedPath(libPath)+" is missing. To import this one, first run "+remove,
+		return refused(refusedNameTaken, "agentx already manages a skill of this name, whose folder "+quotedPath(libPath)+" is missing. To import this one, first run "+remove,
 			shown+" cannot be imported: agentx already manages a skill of this name, whose folder "+quotedPath(libPath)+" is missing",
 			"run "+remove+", then "+again)
 	}
 	dir := libPath
 	switch info, err := os.Lstat(libPath); {
 	case err == nil && info.Mode()&os.ModeSymlink != 0:
-		return symlinkRefusal(name, libPath)
+		return symlink(libPath)
 	case err == nil && !info.IsDir():
-		return refused("a file, and a skill is a folder. To import it, put the skill's folder at "+quotedPath(libPath),
+		return refused(refusedFile, "a file, and a skill is a folder. To import it, put the skill's folder at "+quotedPath(libPath),
 			shown+" is a file, and agentx imports folders only",
 			"put the skill's folder at "+quotedPath(libPath)+", then "+again)
 	case err == nil && !holdsSkillFile(libPath):
-		return refused("a folder with no SKILL.md file. To import it, add a SKILL.md to "+quotedPath(libPath),
+		return refused(refusedNoSkillFile, "a folder with no SKILL.md file. To import it, add a SKILL.md to "+quotedPath(libPath),
 			shown+" has no SKILL.md file, so it is not a skill",
 			"add a SKILL.md to "+quotedPath(libPath)+", then "+again)
 	case err != nil:
-		dirs, links := inv.adoptSites(name)
+		dirs, links := sites(name)
 		switch {
 		case len(dirs) > 0:
 			dir = dirs[0].path
 		case len(links) > 0:
-			return symlinkRefusal(name, links[0])
+			return symlink(links[0])
 		case rec.tracked:
-			return refused("a whole repository that Skillshare tracks. Add it with 'agentx source add <url>', then install its skills",
+			return refused(refusedTracked, "a whole repository that Skillshare tracks. Add it with 'agentx source add <url>', then install its skills",
 				shown+" is a repository Skillshare tracks as a whole, with skills inside it",
 				"add the repository with 'agentx source add <url>' and install its skills with 'agentx skill add'")
 		default:
-			return refused("only in "+quotedPath(rec.dir)+", where no agent looks for skills. To import it, move that folder to "+quotedPath(libPath),
+			return refused(refusedUnplaced, "only in "+quotedPath(rec.dir)+", where no agent looks for skills. To import it, move that folder to "+quotedPath(libPath),
 				shown+" is only in "+quotedPath(rec.dir)+", where no agent looks for skills",
 				"move "+quotedPath(rec.dir)+" to "+quotedPath(libPath)+", then "+again)
 		}
 	}
 	if forkNameRefusal(name) != "" {
-		return invalidNameRow(dir), invalidNameRefusal(name, dir)
+		return refusedInvalidName, invalidNameRow(dir), invalidNameRefusal(name, dir)
 	}
 	if own := ownRepo(dir); own != "" {
-		return ownRepoRow(own), ownRepoRefusal(name, own)
+		return refusedRepository, ownRepoRow(own), ownRepoRefusal(name, own)
 	}
-	return "", nil
+	return "", "", nil
 }
 
 // adoptSourceOf finds the unmanaged skill called name. The library comes
@@ -472,6 +477,27 @@ func (inv *invocation) adoptSourceOf(fk *forking, name string, records map[strin
 // directories are read, so a project's skill and a plugin's are no part of
 // it, and a configuration counts whether or not it is enabled.
 func (inv *invocation) adoptSites(name string) (dirs []adoptPlace, links []string) {
+	return inv.adoptSitesIn(inv.detectedTargets(), name)
+}
+
+// siteFinder is adoptSites for a run that asks about many names.
+type siteFinder func(name string) (dirs []adoptPlace, links []string)
+
+// siteFinder is adoptSites over the configurations as they are detected the
+// first time it is asked, so that judging many records detects them once.
+func (inv *invocation) siteFinder() siteFinder {
+	var targets []placeTarget
+	detected := false
+	return func(name string) ([]adoptPlace, []string) {
+		if !detected {
+			targets, detected = inv.detectedTargets(), true
+		}
+		return inv.adoptSitesIn(targets, name)
+	}
+}
+
+// adoptSitesIn is adoptSites over targets, the detected configurations.
+func (inv *invocation) adoptSitesIn(targets []placeTarget, name string) (dirs []adoptPlace, links []string) {
 	libPath := inv.libraryPath(name)
 	libKey := keyOf(libPath)
 	type seen struct {
@@ -479,7 +505,7 @@ func (inv *invocation) adoptSites(name string) (dirs []adoptPlace, links []strin
 		dir int // its place in dirs, -1 for a path that is no directory of the skill
 	}
 	var found []seen
-	for _, t := range inv.detectedTargets() {
+	for _, t := range targets {
 		if t.dir == "" {
 			continue
 		}

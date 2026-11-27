@@ -15,6 +15,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/skillshare"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 	"github.com/grundmanise/agentx/apps/cli/internal/vercel"
@@ -34,6 +35,20 @@ const (
 	adoptAdopted   = "adopted"   // this run installed it
 	adoptManaged   = "managed"   // agentx already knows the skill
 	adoptRefused   = "refused"   // it cannot be adopted, and why
+)
+
+// The reasons a record's skill cannot be adopted for, as an inventory names
+// them, see adoptable: what asItIsRefusal found in the way of adopting a
+// skill whose record names nowhere agentx can install it from.
+const (
+	refusedNameTaken   = "name_taken"    // agentx manages a skill of its name, whose library folder is missing
+	refusedSymlink     = "symlink"       // this machine holds it as a symlink and no folder
+	refusedFile        = "file"          // the library holds a file under its name
+	refusedNoSkillFile = "no_skill_file" // its library folder holds no SKILL.md
+	refusedTracked     = "tracked"       // it is a repository Skillshare tracks as a whole
+	refusedUnplaced    = "unplaced"      // only that tool's own folder holds it, where no agent client looks
+	refusedInvalidName = "invalid_name"  // its folder has a name agentx cannot give a skill
+	refusedRepository  = "repository"    // its folder is a Git repository of its own
 )
 
 // adoptionEvent is one skill another tool installed, as that tool recorded
@@ -198,7 +213,7 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 		return err
 	}
 	inv.adoptForce = sel.force
-	records, err := inv.readRecords(sel.reads())
+	records, err := inv.readRecords(sel.reads(), inv.out.warn)
 	if err != nil {
 		return err
 	}
@@ -206,10 +221,11 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 	if err != nil {
 		return err
 	}
-	cands, err := inv.adoptCandidates(records, lineage)
+	s, err := inv.loadSettings()
 	if err != nil {
 		return err
 	}
+	cands := inv.adoptCandidates(records, lineage, s, inv.out.warn)
 	var loose []looseSkill
 	if len(sel.tools) == 0 && (sel.all || !sel.adopting()) {
 		if loose, err = inv.looseSkills(cands, lineage); err != nil {
@@ -266,13 +282,14 @@ type record struct {
 
 // readRecords reads the install records of tools, in name order. A name
 // both tools record is one warning, and the Vercel skills CLI's record is
-// the one used: its directory is the library entry itself.
-func (inv *invocation) readRecords(tools map[string]bool) ([]record, error) {
+// the one used: its directory is the library entry itself. warn is told
+// what the files say that a reader cannot use.
+func (inv *invocation) readRecords(tools map[string]bool, warn func(string)) ([]record, error) {
 	var records []record
 	if tools[toolVercel] {
 		entries, warnings, err := vercel.Read(vercel.LockPaths(inv.env, inv.dirs.User))
 		for _, w := range warnings {
-			inv.out.warn(w)
+			warn(w)
 		}
 		if err != nil {
 			return nil, recordFailure(err)
@@ -291,7 +308,7 @@ func (inv *invocation) readRecords(tools map[string]bool) ([]record, error) {
 	skills := cfg.Skills
 	stored, warnings, err := skillshare.Read(skills)
 	for _, w := range warnings {
-		inv.out.warn(w)
+		warn(w)
 	}
 	if err != nil {
 		return nil, recordFailure(err)
@@ -303,13 +320,13 @@ func (inv *invocation) readRecords(tools map[string]bool) ([]record, error) {
 	for _, e := range stored {
 		r, warning := skillshareRecord(skills, e)
 		if warning != "" {
-			inv.out.warn(warning)
+			warn(warning)
 		}
 		if r.name == "" {
 			continue
 		}
 		if have, ok := byName[r.name]; ok {
-			inv.out.warn(fmt.Sprintf("%s is recorded in %s and in %s; the record in %s is the one used", sanitised(r.name), have.file, r.file, have.file))
+			warn(fmt.Sprintf("%s is recorded in %s and in %s; the record in %s is the one used", sanitised(r.name), have.file, r.file, have.file))
 			continue
 		}
 		records = append(records, r)
@@ -393,6 +410,7 @@ type candidate struct {
 	added  bool          // the settings already hold that source
 	state  string
 	reason string
+	code   string   // why it is refused, as an inventory names it, see adoptable
 	fail   *failure // the refusal, which is how a run asked to adopt it answers
 	// asItIs says the record names nowhere agentx can install the skill
 	// from, and this machine holds a folder of it to keep: adopting it
@@ -407,12 +425,11 @@ func (c *candidate) refuse(f *failure) {
 
 // adoptCandidates turns the records into candidates: one per record whose
 // directory exists, in name order. A record whose directory is gone is no
-// candidate at all, since the user removed what that tool installed.
-func (inv *invocation) adoptCandidates(records []record, lineage map[string]lineage.Record) ([]*candidate, error) {
-	s, err := inv.loadSettings()
-	if err != nil {
-		return nil, err
-	}
+// candidate at all, since the user removed what that tool installed. They
+// are judged against the lineage and the settings s, and warn is told of a
+// record that is left out.
+func (inv *invocation) adoptCandidates(records []record, lineage map[string]lineage.Record, s home.Settings, warn func(string)) []*candidate {
+	sites := inv.siteFinder()
 	var cands []*candidate
 	for _, r := range records {
 		if why := nameRefusal(r.name); why != "" {
@@ -420,7 +437,7 @@ func (inv *invocation) adoptCandidates(records []record, lineage map[string]line
 			// branch, and it is refused in the words of whichever cannot
 			// hold it. Nothing is looked up under it: a name that walks out
 			// of the library may not be joined to a path.
-			inv.out.warn(fmt.Sprintf("%q in %s %s and is left out", sanitised(r.name), r.file, why))
+			warn(fmt.Sprintf("%q in %s %s and is left out", sanitised(r.name), r.file, why))
 			continue
 		}
 		if r.dir == "" {
@@ -428,17 +445,17 @@ func (inv *invocation) adoptCandidates(records []record, lineage map[string]line
 		}
 		exists, err := entryExists(r.dir)
 		if err != nil {
-			inv.out.warn(r.dir + " could not be read and is left out: " + err.Error())
+			warn(r.dir + " could not be read and is left out: " + err.Error())
 			continue
 		}
 		if !exists {
 			continue // the record names it, this machine no longer has it
 		}
 		c := &candidate{rec: r, state: adoptCandidate}
-		inv.judge(c, lineage, s)
+		inv.judge(c, lineage, s, sites, warn)
 		cands = append(cands, c)
 	}
-	return cands, nil
+	return cands
 }
 
 // judge decides what can be done with one candidate from what is on this
@@ -447,8 +464,8 @@ func (inv *invocation) adoptCandidates(records []record, lineage map[string]line
 // name that is a hub skill, or a managed skill the
 // library holds, is managed already. A record that names no source agentx
 // can install from leaves the folder this machine holds of the skill to be
-// adopted as it is, see judgeAsItIs.
-func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s home.Settings) {
+// adopted as it is, see judgeAsItIs, which sites finds the folders for.
+func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s home.Settings, sites siteFinder, warn func(string)) {
 	rec, known := records[c.rec.name]
 	if known && (rec.Kind == lineage.KindFork || isRealDirectory(inv.libraryPath(c.rec.name))) {
 		// Left alone, and still shown with the source the record names
@@ -461,21 +478,21 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 		return
 	}
 	if c.rec.foreign || c.rec.tracked {
-		inv.judgeAsItIs(c, known)
+		inv.judgeAsItIs(c, known, sites)
 		return
 	}
 	src, f := adoptSource(c.rec)
 	if f != nil {
-		inv.judgeAsItIs(c, known)
+		inv.judgeAsItIs(c, known, sites)
 		return
 	}
 	if src.Stripped {
-		inv.out.warn("the user or token in the URL of " + sanitised(c.rec.name) + " was dropped: agentx never stores credentials; put them in a git credential helper (git config credential.helper) or an SSH key")
+		warn("the user or token in the URL of " + sanitised(c.rec.name) + " was dropped: agentx never stores credentials; put them in a git credential helper (git config credential.helper) or an SSH key")
 		src.Stripped = false
 	}
 	if !lineage.ValidPath(c.rec.subpath) {
 		// A directory a trailer cannot carry names nothing agentx can install.
-		inv.judgeAsItIs(c, known)
+		inv.judgeAsItIs(c, known, sites)
 		return
 	}
 	c.src = src
@@ -496,14 +513,50 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 // install the skill from: one this machine holds a folder of is adopted
 // as it is, and any other is refused for what is in the way of that, see
 // asItIsRefusal. managed says an import branch holds the name.
-func (inv *invocation) judgeAsItIs(c *candidate, managed bool) {
-	reason, f := inv.asItIsRefusal(c.rec, managed)
+func (inv *invocation) judgeAsItIs(c *candidate, managed bool, sites siteFinder) {
+	code, reason, f := inv.asItIsRefusal(c.rec, managed, sites)
 	if f == nil {
 		c.asItIs = true
 		return
 	}
 	c.refuse(f)
-	c.reason = reason
+	c.reason, c.code = reason, code
+}
+
+// adoptable is what an inventory says of the skills the other tools
+// installed: for each tool with a record of a skill this machine holds and
+// agentx does not manage, the Vercel skills CLI first, the names an import
+// can adopt and the ones it cannot, each with why. The records are judged as
+// a preview judges them, see adoptCandidates, against the lineage and the
+// settings the scan read under its lock: the record files and the machine
+// are read, and no git runs. What a preview warns of in a record file is the
+// preview's to say. A file that is no record file is one warning of the
+// scan, and no skill of either tool is listed.
+func (inv *invocation) adoptable(lineage map[string]lineage.Record, s home.Settings, warn func(string)) []scan.Adoptable {
+	quiet := func(string) {}
+	listed := []scan.Adoptable{}
+	records, err := inv.readRecords(adoptSelection{}.reads(), quiet)
+	if err != nil {
+		warn(err.Error() + "; the skills another tool installed are not listed")
+		return listed
+	}
+	cands := inv.adoptCandidates(records, lineage, s, quiet)
+	for _, tool := range []string{toolVercel, toolSkillshare} {
+		of := scan.Adoptable{Tool: tool, Skills: []string{}}
+		for _, c := range cands {
+			switch {
+			case c.rec.tool != tool, c.state == adoptManaged:
+			case c.state == adoptRefused:
+				of.Refused = append(of.Refused, scan.RefusedAdoption{Name: c.rec.name, Reason: c.code})
+			default:
+				of.Skills = append(of.Skills, c.rec.name)
+			}
+		}
+		if len(of.Skills)+len(of.Refused) > 0 {
+			listed = append(listed, of)
+		}
+	}
+	return listed
 }
 
 // reasonNotAdded is the reason of a candidate whose source the settings do

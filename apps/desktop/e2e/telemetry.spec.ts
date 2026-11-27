@@ -166,10 +166,6 @@ test.describe("the question", () => {
     unanswered(cli);
     await page.goto("/");
     await isLaunched(page);
-    // The adoption preview runs once the first inventory has arrived and the checks pass.
-    await expect
-      .poll(() => cli.commands)
-      .toContainEqual(["skill", "import", "--json"]);
     await expect(dialog(page)).toHaveCount(0);
   });
 
@@ -202,10 +198,6 @@ test.describe("the question", () => {
     launches(cli, "off");
     await page.goto("/");
     await isLaunched(page);
-    // The adoption preview runs once the first inventory has arrived and the checks pass.
-    await expect
-      .poll(() => cli.commands)
-      .toContainEqual(["skill", "import", "--json"]);
     await expect(dialog(page)).toHaveCount(0);
   });
 

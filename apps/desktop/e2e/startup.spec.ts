@@ -7,7 +7,6 @@ import {
   expect,
   firstInventory,
   keptReads,
-  loadLines,
   test,
 } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
@@ -35,19 +34,14 @@ const skills = (page: Page) => page.getByRole("heading", { name: "Skills" });
 
 /**
  * The command lines, but the reads of the skill the Skills screen selects, which
- * e2e/skills.spec.ts covers. `skill import` is the store's adoption preview, a read of the launch.
+ * e2e/skills.spec.ts covers.
  */
 const launchCommands = (cli: MockCli) =>
-  cli.commands.filter((l) => l[0] !== "skill" || l[1] === "import");
+  cli.commands.filter((l) => l[0] !== "skill");
 
-/**
- * Waits for the launch and the store's reads once the checks pass, so that the commands a test
- * triggers next come after them.
- */
+/** Waits for the launch, so that the commands a test triggers next come after it. */
 const launched = async (cli: MockCli) => {
-  await expect
-    .poll(() => launchCommands(cli))
-    .toEqual([...launchLines, ...loadLines]);
+  await expect.poll(() => launchCommands(cli)).toEqual(launchLines);
 };
 
 const oldGit = {
@@ -194,7 +188,7 @@ const relaunch = async (cli: MockCli, page: Page, more: string[] = []) => {
   return { commands: () => cli.commands.slice(before), doctor: held };
 };
 
-test("a later launch shows the kept inventory at once under a frosted pane, and runs its reads once the checks pass", async ({
+test("a later launch shows the kept inventory at once under a frosted pane", async ({
   cli,
   page,
 }) => {
@@ -223,9 +217,6 @@ test("a later launch shows the kept inventory at once under a frosted pane, and 
   await expect(screen(page)).not.toHaveAttribute("inert");
   await expect(page.locator("[inert]")).toHaveCount(0);
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
-  await expect
-    .poll(() => commands())
-    .toEqual(expect.arrayContaining(loadLines));
   // The skill's files show from the read the first launch kept.
   await expect(page.getByRole("region", { name: "Files" })).toContainText(
     "Use this skill to notes."
@@ -256,7 +247,7 @@ test("a later launch whose check fails shows the layer, and Retry brings the scr
   cli,
   page,
 }) => {
-  const { commands, doctor } = await relaunch(cli, page);
+  const { doctor } = await relaunch(cli, page);
   doctor.expire();
   await expect(title(page)).toHaveText("agentx can't check this machine");
 
@@ -264,9 +255,6 @@ test("a later launch whose check fails shows the layer, and Retry brings the scr
   await page.getByRole("button", { name: "Retry" }).click();
   await expect(page.getByRole("heading", { name: "notes" })).toBeVisible();
   await expect(screen(page)).toHaveCSS("opacity", "1");
-  await expect
-    .poll(() => commands())
-    .toEqual(expect.arrayContaining(loadLines));
 });
 
 test("a machine with no skills and no agents passes", async ({ cli, page }) => {
@@ -436,7 +424,7 @@ test("Retry runs everything again", async ({ cli, page }) => {
   await expect(layer(page)).toHaveCount(0);
   await expect
     .poll(() => cli.commands)
-    .toEqual([...launchLines, ...launchLines, ...loadLines]);
+    .toEqual([...launchLines, ...launchLines]);
   expect(cli.serveStarts).toBe(1);
 });
 
@@ -449,7 +437,7 @@ test("Enter retries", async ({ cli, page }) => {
   await expect(skills(page)).toBeVisible();
   await expect
     .poll(() => cli.commands)
-    .toEqual([...launchLines, ...launchLines, ...loadLines]);
+    .toEqual([...launchLines, ...launchLines]);
 });
 
 test("Copy report copies doctor's output in the CLI's layout", async ({
@@ -534,7 +522,7 @@ test("Run checks shows every check in a dialog over the screen, until Done", asy
   // The serve child already running answered check 5; none was started again.
   await expect
     .poll(() => launchCommands(cli))
-    .toEqual([...launchLines, ...loadLines, ...launchLines]);
+    .toEqual([...launchLines, ...launchLines]);
   expect(cli.serveStarts).toBe(1);
 });
 
@@ -612,7 +600,7 @@ test("a serve exit with code 8 after launch brings the checks back", async ({
   cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
   await cli.serveExit(8, [], null);
   await expect(title(page)).toHaveText("agentx can't open its store");
-  expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
+  expect(cli.commands).toEqual([...launchLines, ...launchLines]);
 });
 
 test("a store error serve reports after launch brings the checks back", async ({
@@ -632,7 +620,7 @@ test("a store error serve reports after launch brings the checks back", async ({
     },
   ]);
   await expect(title(page)).toHaveText("agentx can't open its store");
-  expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
+  expect(cli.commands).toEqual([...launchLines, ...launchLines]);
 });
 
 test("a run exiting with code 8 brings the checks back", async ({
@@ -651,7 +639,6 @@ test("a run exiting with code 8 brings the checks back", async ({
   await expect(title(page)).toHaveText("agentx can't open its store");
   expect(cli.commands).toEqual([
     ...launchLines,
-    ...loadLines,
     ["scan", "--json"],
     ...launchLines,
   ]);

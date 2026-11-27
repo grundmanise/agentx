@@ -186,6 +186,14 @@ var valueLists = []valueList{
 	{name: "AdoptionState", values: []string{adoptCandidate, adoptAdopted, adoptManaged, adoptRefused}, fields: []fieldRef{
 		{adoptionEvent{}, "State"},
 	}},
+	{name: "AdoptionTool", values: []string{toolVercel, toolSkillshare}, fields: []fieldRef{
+		{scan.Adoptable{}, "Tool"},
+	}},
+	{name: "AdoptionRefusal", open: true, values: []string{
+		refusedNameTaken, refusedSymlink, refusedFile, refusedNoSkillFile, refusedTracked, refusedUnplaced, refusedInvalidName, refusedRepository,
+	}, fields: []fieldRef{
+		{scan.RefusedAdoption{}, "Reason"},
+	}},
 	{name: "ImportState", values: []string{restorePresent, restoreMissing, restoreDifferent}, fields: []fieldRef{
 		{importSkillEvent{}, "State"},
 	}},

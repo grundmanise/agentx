@@ -9,7 +9,6 @@ import {
   manyConfigurations,
 } from "./fixtures/agents.ts";
 import {
-  adoption,
   fileReads,
   filesOf,
   history,
@@ -17,7 +16,7 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -25,19 +24,17 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-/** Whether a command line is one the launch or the store's reads run. */
-const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  );
+/** Whether a command line is one the launch runs. */
+const isLaunch = (line: string[]) =>
+  launchLines.some((known) => known.join(" ") === line.join(" "));
 
 /** The reads the detail pane runs on its own when a skill is selected. */
 const detailReads = new Set(["skill history", "skill files", "skill diff"]);
 
-/** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
+/** The command lines the controls ran: everything but the launch and the pane's reads. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
-    (l) => !(isLaunchOrLoad(l) || detailReads.has(l.slice(0, 2).join(" ")))
+    (l) => !(isLaunch(l) || detailReads.has(l.slice(0, 2).join(" ")))
   );
 
 const toasts = (page: Page) =>
@@ -57,17 +54,18 @@ const pane = (page: Page, name: string) =>
 const chip = (article: Locator, name: string) =>
   article.getByRole("switch", { exact: true, name });
 
+/** The fixture machine with no skill another tool recorded. */
+const unrecorded = { ...inventory, adoptable: [] } satisfies InlineEvent;
+
 /** Opens a skill on the fixture machine: a library skill by its name, any other by its row's key. */
 const openSkill = async (
   cli: MockCli,
   page: Page,
   name: string,
   key = name,
-  machine: InlineEvent = inventory,
-  records: InlineEvent[] = adoption
+  machine: InlineEvent = inventory
 ) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["skill", "import"], { events: records });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });
@@ -306,7 +304,7 @@ test.describe("chips", () => {
     cli,
     page,
   }) => {
-    await openSkill(cli, page, "scratch", "scratch", inventory, []);
+    await openSkill(cli, page, "scratch", "scratch", unrecorded);
     await chip(pane(page, "scratch"), "Claude Code").click();
     await expect(
       toasts(page).getByText(
@@ -327,7 +325,7 @@ test.describe("chips", () => {
     cli,
     page,
   }) => {
-    await openSkill(cli, page, "scratch", "scratch", inventory, []);
+    await openSkill(cli, page, "scratch", "scratch", unrecorded);
     await chip(pane(page, "scratch"), "Claude Code").click();
     cli.register(["skill", "import", "scratch"], {
       events: [
@@ -369,7 +367,7 @@ test.describe("chips", () => {
     cli,
     page,
   }) => {
-    await openSkill(cli, page, "scratch", "scratch", inventory, []);
+    await openSkill(cli, page, "scratch", "scratch", unrecorded);
     await chip(pane(page, "scratch"), "Claude Code").click();
     cli.register(["skill", "import", "scratch"], {
       events: [

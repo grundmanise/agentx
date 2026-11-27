@@ -149,14 +149,8 @@ const diskDetails = (row: SkillRow): Detail[] => {
   const details: Detail[] = [...new Set(paths)].map((path) =>
     linked({ key: "Found at", value: path }, pathLink(path))
   );
-  if (row.adoption !== undefined) {
-    details.push({
-      key: "Installed by",
-      value:
-        row.adoption.source === undefined
-          ? toolName(row.adoption)
-          : `${toolName(row.adoption)} · ${row.adoption.source}`,
-    });
+  if (row.recorded !== undefined) {
+    details.push({ key: "Installed by", value: toolName(row.recorded.tool) });
   }
   return details;
 };

@@ -29,7 +29,7 @@ import {
   updatesLibrary,
   ZETA,
 } from "./fixtures/updates.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
 declare global {
@@ -50,13 +50,12 @@ const launchLines = [
  */
 const detailReads = new Set(["skill history", "skill files", "skill diff"]);
 
-/** The command lines the buttons ran: everything but the launch, the store's and the pane's reads. */
+/** The command lines the buttons ran: everything but the launch and the pane's reads. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
-      ![...launchLines, ...loadLines].some(
-        (k) => k.join(" ") === l.join(" ")
-      ) && !detailReads.has(l.slice(0, 2).join(" "))
+      !launchLines.some((k) => k.join(" ") === l.join(" ")) &&
+      !detailReads.has(l.slice(0, 2).join(" "))
   );
 
 const pane = (page: Page, name: string) =>

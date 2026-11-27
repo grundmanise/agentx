@@ -5,7 +5,6 @@ import { locationsOf, projectRows } from "#/screens/skills/projection.ts";
 
 import { manyAgentsInventory, manyConfigurations } from "./fixtures/agents.ts";
 import {
-  adoption,
   deletedWithFrontMatter,
   fileReads,
   filesOf,
@@ -20,7 +19,6 @@ import {
   expect,
   keptReads,
   libraryPath,
-  loadLines,
   test,
   thisMachine,
 } from "./harness/cli.ts";
@@ -31,10 +29,8 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  );
+const isLaunch = (line: string[]) =>
+  launchLines.some((known) => known.join(" ") === line.join(" "));
 
 /**
  * The command lines the Skills screen ran, but the history reads, which e2e/skills.spec.ts covers,
@@ -42,7 +38,7 @@ const isLaunchOrLoad = (line: string[]) =>
  */
 const later = (cli: MockCli) =>
   cli.commands.filter(
-    (l) => !isLaunchOrLoad(l) && l[1] !== "history" && !l.includes("--update")
+    (l) => !isLaunch(l) && l[1] !== "history" && !l.includes("--update")
   );
 
 /** `later`, in a fixed order: the two reads of a modified skill run at once. */
@@ -94,7 +90,6 @@ const openSkills = async (
   machine: typeof inventory = inventory
 ) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["skill", "import"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });
@@ -486,7 +481,7 @@ test("the places of a skill come from the inventory, the library first", () => {
     warnings: [],
     ...inventory,
   };
-  const rows = projectRows({ adoption, inventory: whole });
+  const rows = projectRows({ inventory: whole });
   // `library` is where agentx keeps the library, or null while that is not known.
   const places = (name: string, library: string | null) =>
     locationsOf(

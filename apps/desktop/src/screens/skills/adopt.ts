@@ -1,6 +1,7 @@
-// Adopting the skills another tool installed, all at once: which tools have skills to adopt, and
-// the one run that adopts them, which the Adopt skills section of Settings and the Unmanaged
-// group's Adopt all both start through the adopt dialog (`adopt-dialog.tsx`). The run is one
+// Adopting the skills another tool installed, all at once: which tools have skills to adopt, as
+// the inventory lists them (`adoptable`), and the one run that adopts them, which the Adopt skills
+// section of Settings and the Unmanaged group's Adopt all both start through the adopt dialog
+// (`adopt-dialog.tsx`). The run is one
 // `skill import --all` with a `--from` for each tool the dialog covers. Each skill of the dialog
 // is a row whose state follows the run's `progress` events, and whose result is the `adoption`
 // event the run reports for it. The dialog shows the result, so no toast does; the Activity log
@@ -8,9 +9,16 @@
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { AdoptionEvent, CliEvent } from "#/cli/events.gen.ts";
+import type {
+  Adoptable,
+  AdoptionEvent,
+  AdoptionTool,
+  CliEvent,
+  RefusedAdoption,
+} from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";
+import { refusalText } from "#/screens/skills/placements.ts";
 import { toolName } from "#/screens/skills/projection.ts";
 import { cancelCommand } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
@@ -20,9 +28,9 @@ import type { Problem } from "#/store/store.ts";
 /** The value of `skill import --from` that names a tool. */
 export type ToolArg = "skills-cli" | "skillshare";
 
-/** A tool `skill import` takes the skills of: the `tool` of its records, and its `--from` value. */
+/** A tool `skill import` takes the skills of: as the inventory names it, and its `--from` value. */
 interface Tool {
-  tool: AdoptionEvent["tool"];
+  tool: AdoptionTool;
   arg: ToolArg;
 }
 
@@ -32,29 +40,27 @@ const TOOLS: Tool[] = [
   { arg: "skillshare", tool: "skillshare" },
 ];
 
-/** One tool's records in the adoption preview: the skills to adopt and the ones it refuses. */
+/** One tool's skills in the inventory: the names to adopt and the skills `skill import` refuses. */
 export interface ToolRecords {
   arg: ToolArg;
   /** The tool as the product calls it: "Skills CLI", "Skillshare". */
   name: string;
-  candidates: AdoptionEvent[];
-  refused: AdoptionEvent[];
+  candidates: string[];
+  refused: RefusedAdoption[];
 }
 
-/** The tools with a skill to adopt, from the adoption preview, in the app's order. */
-export const toolsToAdopt = (adoption: readonly AdoptionEvent[]) =>
+/** The tools with a skill to adopt, from the inventory's `adoptable`, in the app's order. */
+export const toolsToAdopt = (adoptable: readonly Adoptable[] = []) =>
   TOOLS.flatMap((tool): ToolRecords[] => {
-    const records = adoption.filter((r) => r.tool === tool.tool);
-    const candidates = records.filter((r) => r.state === "candidate");
-    const [first] = candidates;
-    return first === undefined
+    const records = adoptable.find((a) => a.tool === tool.tool);
+    return records === undefined || records.skills.length === 0
       ? []
       : [
           {
             arg: tool.arg,
-            candidates,
-            name: toolName(first),
-            refused: records.filter((r) => r.state === "refused"),
+            candidates: records.skills,
+            name: toolName(tool.tool),
+            refused: records.refused ?? [],
           },
         ];
   });
@@ -62,8 +68,8 @@ export const toolsToAdopt = (adoption: readonly AdoptionEvent[]) =>
 /**
  * Where a skill of the dialog is. Before the run every skill to adopt is `waiting`; a step of the
  * run that names it makes it `running`, and its `install` step `installed`. When the run ends its
- * `adoption` event makes it `adopted` or `failed`. A record the preview refuses is `left-out` from
- * the start, with the preview's reason.
+ * `adoption` event makes it `adopted` or `failed`. A skill the inventory lists as refused is
+ * `left-out` from the start, with why.
  */
 export type RowStatus =
   | "waiting"
@@ -78,8 +84,8 @@ export interface AdoptRow {
   tool: ToolArg;
   status: RowStatus;
   /**
-   * Why the CLI did not adopt it, in its words. The preview's reason of a record it refuses is a
-   * sentence about the skill that does not name it; a run's is the refusal's message, which may
+   * Why the CLI does not adopt it. Before the run, the app's sentence for the inventory's reason,
+   * which does not name the skill; after it, the run's own words, a refusal's message, which may
    * start with the name.
    */
   reason?: string;
@@ -88,16 +94,16 @@ export interface AdoptRow {
 /** The rows of a dialog over `tools`: each tool's skills to adopt, then the ones it refuses. */
 export const rowsOf = (tools: readonly ToolRecords[]): AdoptRow[] =>
   tools.flatMap((t) => [
-    ...t.candidates.map((r): AdoptRow => ({
-      name: r.name,
+    ...t.candidates.map((name): AdoptRow => ({
+      name,
       status: "waiting",
       tool: t.arg,
     })),
     ...t.refused.map((r): AdoptRow => ({
       name: r.name,
+      reason: refusalText(r.reason),
       status: "left-out",
       tool: t.arg,
-      ...(r.reason === undefined ? {} : { reason: r.reason }),
     })),
   ]);
 
@@ -107,7 +113,7 @@ export interface ToolSummary {
   name: string;
   /** Its skills to adopt. */
   offered: number;
-  /** Its records the preview refuses. */
+  /** Its skills `skill import` refuses. */
   refused: number;
 }
 
@@ -264,8 +270,7 @@ const answeredByRunner = (outcome: Outcome) =>
 
 /**
  * Adopts every skill of `rows` that is waiting, in one run of `skill import --all` over `tools`,
- * and settles the rows. The run reads the preview again (src/store/loaders.ts), and the
- * inventory follows it.
+ * and settles the rows. The inventory follows it.
  */
 export const adoptAll = async (tools: ToolSummary[], rows: AdoptRow[]) => {
   if (useAdoptRun.getState().run !== undefined) {

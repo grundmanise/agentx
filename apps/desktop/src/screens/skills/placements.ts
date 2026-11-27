@@ -4,6 +4,7 @@
 // every control reads a placement the same way. Nothing here predicts: a chip's state comes from
 // the inventory, and a count from the CLI's result.
 import type {
+  AdoptionRefusal,
   CliEvent,
   Configuration,
   LibraryPlacement,
@@ -58,27 +59,49 @@ export type Importability =
   | { args: string[] }
   | { why: string; inTheWay?: string };
 
-/** The CLI's reason, a clause about the skill, as a sentence of the app's. */
-const asSentence = (reason: string | undefined, fallback: string) =>
-  reason === undefined || reason === ""
-    ? fallback
-    : `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
+/** Why `skill import` cannot take a skill another tool installed, from the inventory's reason. */
+export const refusalText = (reason: AdoptionRefusal): string => {
+  switch (reason) {
+    case "name_taken": {
+      return "agentx already manages a skill with this name, and its folder is missing. Remove that skill first";
+    }
+    case "symlink": {
+      return "It's a link, so it can't be imported";
+    }
+    case "file": {
+      return "It's a file, and a skill is a folder, so it can't be imported";
+    }
+    case "no_skill_file": {
+      return "Its folder has no SKILL.md file, so it can't be imported";
+    }
+    case "tracked": {
+      return "It's a whole repository that Skillshare tracks. Add that repository as a source to install its skills";
+    }
+    case "unplaced": {
+      return "It's in no skills folder an agent client reads, so it can't be imported";
+    }
+    case "invalid_name": {
+      return "Its folder's name is not a valid skill name. Rename the folder first";
+    }
+    case "repository": {
+      return "Its folder is a Git repository of its own, so it can't be imported";
+    }
+    default: {
+      return "It can't be imported";
+    }
+  }
+};
 
 export const importOf = (row: SkillRow): Importability | undefined => {
   if (row.kind !== "disk") {
     return undefined;
   }
-  const state = row.adoption?.state;
-  if (state === "candidate") {
+  const { recorded } = row;
+  if (recorded?.refusal !== undefined) {
+    return { why: refusalText(recorded.refusal) };
+  }
+  if (recorded !== undefined || row.entry !== undefined) {
     return { args: adoptLine(row.name) };
-  }
-  if (state === "refused") {
-    return { why: asSentence(row.adoption?.reason, "It can't be imported") };
-  }
-  if (row.entry !== undefined) {
-    return state === undefined
-      ? { args: adoptLine(row.name) }
-      : { why: asSentence(row.adoption?.reason, "agentx already manages it") };
   }
   const occurrence = occurrenceOf(row);
   if (occurrence === undefined) {
@@ -101,8 +124,8 @@ export const importOf = (row: SkillRow): Importability | undefined => {
  * The `skill import` command line that takes over an unmanaged skill, or undefined when
  * `skill import` has no way to take it:
  *
- * - a skill another tool recorded, which the CLI can adopt (`candidate`), is installed from its
- *   source, or becomes a hub skill with its files as they are when the record names none;
+ * - a skill another tool recorded, which the CLI can adopt, is installed from its source, or
+ *   becomes a hub skill with its files as they are when the record names none;
  * - a library skill no tool recorded becomes a hub skill in its place;
  * - a skill a client holds as a real directory in its own skills directory is named by that
  *   directory, which moves into the library, unless the library holds another skill under that

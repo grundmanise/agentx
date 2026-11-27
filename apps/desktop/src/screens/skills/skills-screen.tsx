@@ -72,7 +72,6 @@ export const SkillsScreen = () => {
   // The skill the route names: `/skills/<key>`; a deeper route is another screen's.
   const routeKey = useRouteKey();
   const inventory = useAppStore((s) => s.inventory);
-  const adoption = useAppStore((s) => s.adoption);
   // The search, filters, sort order and collapsed sections stay while another screen shows.
   const {
     collapsed,
@@ -91,8 +90,7 @@ export const SkillsScreen = () => {
   });
   const sections = { collapsed, expanded };
 
-  const rows =
-    inventory === undefined ? none : projectRows({ adoption, inventory });
+  const rows = inventory === undefined ? none : projectRows({ inventory });
   const groups = groupRows(filterRows(rows, filters), order);
   const flat = groups.flatMap((g) => g.rows);
   // Collapse all closes every group and every plugin's subgroup; Expand all opens every group and

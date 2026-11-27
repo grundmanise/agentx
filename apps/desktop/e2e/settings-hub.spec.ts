@@ -4,7 +4,7 @@ import type { Source } from "#/cli/events.gen.ts";
 
 import { HUB, ACME, hub, sharedOnly, sources } from "./fixtures/hub.ts";
 import type { MockCli } from "./harness/cli.ts";
-import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
+import { expect, firstInventory, test } from "./harness/cli.ts";
 
 const launchLines = [
   ["version", "--json"],
@@ -16,7 +16,7 @@ const storeLines = [["machine", "--json"]];
 
 /** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
 const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines, ...storeLines].some(
+  [...launchLines, ...storeLines].some(
     (known) => known.join(" ") === line.join(" ")
   );
 

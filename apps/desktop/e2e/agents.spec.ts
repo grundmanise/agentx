@@ -10,8 +10,8 @@ import {
   manyAgentsInventory,
   manyConfigurations,
 } from "./fixtures/agents.ts";
-import { adoption, fileReads, history } from "./fixtures/skills.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { fileReads, history } from "./fixtures/skills.ts";
+import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -19,13 +19,11 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  );
+const isLaunch = (line: string[]) =>
+  launchLines.some((known) => known.join(" ") === line.join(" "));
 
 /** The command lines the page ran. */
-const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunchOrLoad(l));
+const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunch(l));
 
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
@@ -34,7 +32,6 @@ const card = (page: Page, name: string) =>
 
 const openAgents = async (cli: MockCli, page: Page) => {
   cli.onServeStart({ events: [inventory] });
-  cli.register(["skill", "import"], { events: adoption });
   await page.goto("/#/agents");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
   await expect(card(page, "Claude Code")).toBeVisible();
@@ -108,7 +105,6 @@ test("the Universal card wraps many agents into rows and stacks five logos", asy
     .slice(0, 24)
     .map((c, i) => ({ ...c, reads_library: i >= 4 }));
   cli.onServeStart({ events: [{ ...manyAgentsInventory(), configurations }] });
-  cli.register(["skill", "import"], { events: adoption });
   await page.goto("/#/agents");
   const universal = card(page, "Universal");
   await expect(universal.getByRole("region")).toHaveCount(20);
@@ -571,7 +567,6 @@ test("an agent whose skills folder links to the library: a direct agent whose pl
       },
     ],
   });
-  cli.register(["skill", "import"], { events: adoption });
   await page.goto("/#/agents");
   const claude = page
     .getByRole("region", { name: "Direct agents" })

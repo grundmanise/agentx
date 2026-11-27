@@ -20,7 +20,7 @@ import {
   UNMANAGED_REASON,
   unreachable,
 } from "./fixtures/settings-transfer.ts";
-import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
+import { expect, firstInventory, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -35,7 +35,7 @@ const storeLines = [["machine", "--json"]];
 const later = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
-      ![...launchLines, ...loadLines, ...storeLines].some(
+      ![...launchLines, ...storeLines].some(
         (known) => known.join(" ") === l.join(" ")
       )
   );

@@ -29,21 +29,19 @@ import {
   ZETA_ID,
 } from "./fixtures/sources.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
-import { configuration, expect, loadLines, test } from "./harness/cli.ts";
+import { configuration, expect, test } from "./harness/cli.ts";
 
 const launchLines = [
   ["version", "--json"],
   ["doctor", "--json"],
 ];
 
-/** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
-const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  );
+/** Whether a command line is one the launch runs. */
+const isLaunch = (line: string[]) =>
+  launchLines.some((known) => known.join(" ") === line.join(" "));
 
 /** The command lines the screen itself ran. */
-const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunchOrLoad(l));
+const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunch(l));
 
 const sourcesRow = (page: Page) => page.getByRole("group", { name: "Sources" });
 const pill = (page: Page, name: string) =>

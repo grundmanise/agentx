@@ -9,18 +9,14 @@ import type { AppState } from "#/store/store.ts";
 
 const none: SkillRow[] = [];
 
-const rowsOf = ({
-  inventory,
-  adoption,
-}: Pick<AppState, "inventory" | "adoption">) =>
-  inventory === undefined ? none : projectRows({ adoption, inventory });
+const rowsOf = ({ inventory }: Pick<AppState, "inventory">) =>
+  inventory === undefined ? none : projectRows({ inventory });
 
 /** Every skill on the machine as a row, from the store as it is now. */
 export const currentRows = () => rowsOf(useAppStore.getState());
 
-/** Every skill on the machine as a row; a new list only when the inventory or a slice it reads changes. */
+/** Every skill on the machine as a row; a new list only when the inventory changes. */
 export const useSkillRows = () => {
   const inventory = useAppStore((s) => s.inventory);
-  const adoption = useAppStore((s) => s.adoption);
-  return rowsOf({ adoption, inventory });
+  return rowsOf({ inventory });
 };
