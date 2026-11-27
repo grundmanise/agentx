@@ -1,10 +1,10 @@
 // Adopting the skills another tool installed, all at once: which tools have skills to adopt, and
 // the one run that adopts them, which the Adopt skills section of Settings and the Unmanaged
-// group's Adopt all both start through the adopt dialog (`adopt-dialog.tsx`). The run is
-// `skill import --from <tool> --all` per tool, one after another. Each skill of the dialog is a
-// row whose state follows the run's `progress` events, and whose result is the `adoption` event
-// the run reports for it. The dialog shows the result, so no toast does; the Activity log has
-// each run's command line and how it ended.
+// group's Adopt all both start through the adopt dialog (`adopt-dialog.tsx`). The run is one
+// `skill import --all` with a `--from` for each tool the dialog covers. Each skill of the dialog
+// is a row whose state follows the run's `progress` events, and whose result is the `adoption`
+// event the run reports for it. The dialog shows the result, so no toast does; the Activity log
+// has the run's command line and how it ended.
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -124,7 +124,7 @@ export const summariesOf = (records: readonly ToolRecords[]): ToolSummary[] =>
 export interface AdoptRun {
   /** The tools it covers, as the dialog named them when Adopt was pressed. */
   tools: ToolSummary[];
-  /** `running` until the last tool's run ends; `ended` with every result; `failed` when a run reported no skill. */
+  /** `running` until the run ends; `ended` with every result; `failed` when the run reported no skill. */
   phase: "running" | "ended" | "failed";
   rows: AdoptRow[];
   /** How many skills the dialog offered: its rows that were waiting when the run started. */
@@ -133,7 +133,7 @@ export interface AdoptRun {
   started: number;
   /** Why a run failed as a whole, before it reported any skill. */
   failure?: Problem;
-  /** The warnings the runs logged that no row says. */
+  /** The warnings the run logged that no row says. */
   warnings: string[];
 }
 
@@ -148,14 +148,13 @@ const update = (change: (run: AdoptRun) => AdoptRun) => {
   }));
 };
 
-/** The label of the run of `skill import --from <tool> --all`. */
-const adoptAllLabel = (tool: ToolArg) => `adopt all ${tool}`;
+/** The label of the run of the dialog. */
+const ADOPT_ALL = "adopt all";
 
-/** Stops the run of the dialog, if one runs: the tool it is on, and the ones after it. */
+/** Stops the run of the dialog, if one runs. */
 export const stopAdoptRun = () => {
-  const { run } = useAdoptRun.getState();
-  if (run?.phase === "running") {
-    void cancelCommand(...run.tools.map((t) => adoptAllLabel(t.arg)));
+  if (useAdoptRun.getState().run?.phase === "running") {
+    void cancelCommand(ADOPT_ALL);
   }
 };
 
@@ -198,24 +197,17 @@ const stepped = (row: AdoptRow, phase: string): AdoptRow => {
   return { ...row, status: phase === "install" ? "installed" : "running" };
 };
 
-/** A row as the run's `adoption` event for it says; a row of another tool is left as it is. */
-const settled = (
-  row: AdoptRow,
-  tool: ToolArg,
-  adoption: AdoptionEvent[]
-): AdoptRow => {
-  if (row.tool !== tool) {
-    return row;
-  }
+/** A row as the run's `adoption` event for it says. */
+const settled = (row: AdoptRow, adoption: AdoptionEvent[]): AdoptRow => {
   const event = adoption.find((e) => e.name === row.name);
   if (event?.state === "adopted" || event?.state === "managed") {
-    return { name: row.name, status: "adopted", tool };
+    return { name: row.name, status: "adopted", tool: row.tool };
   }
   const reason = event?.reason ?? row.reason;
   return {
     name: row.name,
     status: row.status === "left-out" ? "left-out" : "failed",
-    tool,
+    tool: row.tool,
     ...(reason === undefined ? {} : { reason }),
   };
 };
@@ -271,68 +263,9 @@ const answeredByRunner = (outcome: Outcome) =>
   outcome.cancelled;
 
 /**
- * Runs one tool's `skill import --from <tool> --all` and settles its rows. Returns false when the
- * run did not report its skills or was stopped, and the runs after it should not start.
- */
-const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
-  const offered = new Set(
-    rows
-      .filter((r) => r.tool === tool && r.status === "waiting")
-      .map((r) => r.name)
-  );
-  const outcome = await runUntilSettled(
-    ["skill", "import", "--from", tool, "--all"],
-    {
-      label: adoptAllLabel(tool),
-      onProgress: (progress) => {
-        const { phase, subject } = progress;
-        update((run) => ({
-          ...run,
-          rows: run.rows.map((row) =>
-            row.tool === tool && row.name === subject
-              ? stepped(row, phase)
-              : row
-          ),
-          started: run.started + (phase === "blobs" ? 1 : 0),
-        }));
-      },
-      ownFailure: true,
-    }
-  );
-  const adoption = adoptionsOf(outcome.events);
-  if (adoption.length > 0) {
-    update((run) => ({
-      ...run,
-      rows: run.rows.map((row) => settled(row, tool, adoption)),
-      warnings: [...run.warnings, ...otherWarnings(outcome)],
-    }));
-    return !outcome.cancelled;
-  }
-  if (outcome.exitCode === EXIT_CODES.ok) {
-    return true;
-  }
-  // Nothing was reported: the rows stay as they were before the run.
-  const before = (row: AdoptRow): AdoptRow =>
-    row.tool === tool && offered.has(row.name)
-      ? { name: row.name, status: "waiting", tool }
-      : row;
-  if (answeredByRunner(outcome)) {
-    // The runner said why; the dialog goes back to before the run, so Adopt can run again.
-    useAdoptRun.setState({ run: undefined });
-    return false;
-  }
-  update((run) => ({
-    ...run,
-    failure: failureOf(outcome),
-    phase: "failed",
-    rows: run.rows.map(before),
-  }));
-  return false;
-};
-
-/**
- * Adopts every skill of `rows` that is waiting, one tool after another, in the dialog's order.
- * Each run reads the preview again (src/store/loaders.ts), and the inventory follows it.
+ * Adopts every skill of `rows` that is waiting, in one run of `skill import --all` over `tools`,
+ * and settles the rows. The run reads the preview again (src/store/loaders.ts), and the
+ * inventory follows it.
  */
 export const adoptAll = async (tools: ToolSummary[], rows: AdoptRow[]) => {
   if (useAdoptRun.getState().run !== undefined) {
@@ -348,13 +281,47 @@ export const adoptAll = async (tools: ToolSummary[], rows: AdoptRow[]) => {
       warnings: [],
     },
   });
-  let going = true;
-  for (const { arg } of tools) {
-    if (going) {
-      // One tool after another: the CLI's lock admits one run at a time.
-      // oxlint-disable-next-line no-await-in-loop
-      going = await adoptTool(arg, rows);
+  const outcome = await runUntilSettled(
+    ["skill", "import", ...tools.flatMap((t) => ["--from", t.arg]), "--all"],
+    {
+      label: ADOPT_ALL,
+      onProgress: (progress) => {
+        const { phase, subject } = progress;
+        update((run) => ({
+          ...run,
+          rows: run.rows.map((row) =>
+            row.name === subject ? stepped(row, phase) : row
+          ),
+          started: run.started + (phase === "blobs" ? 1 : 0),
+        }));
+      },
+      ownFailure: true,
     }
+  );
+  const adoption = adoptionsOf(outcome.events);
+  if (adoption.length > 0) {
+    update((run) => ({
+      ...run,
+      phase: "ended",
+      rows: run.rows.map((row) => settled(row, adoption)),
+      warnings: otherWarnings(outcome),
+    }));
+    return;
   }
-  update((run) => (run.phase === "running" ? { ...run, phase: "ended" } : run));
+  if (outcome.exitCode === EXIT_CODES.ok) {
+    update((run) => ({ ...run, phase: "ended" }));
+    return;
+  }
+  if (answeredByRunner(outcome)) {
+    // The runner said why; the dialog goes back to before the run, so Adopt can run again.
+    useAdoptRun.setState({ run: undefined });
+    return;
+  }
+  // Nothing was reported: the rows stay as they were before the run.
+  update((run) => ({
+    ...run,
+    failure: failureOf(outcome),
+    phase: "failed",
+    rows,
+  }));
 };

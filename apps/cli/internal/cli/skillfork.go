@@ -98,6 +98,7 @@ type forking struct {
 	record  *committing
 	writer  *forkWriter // the fork commit writer, read by checkForking for a fork's fork
 	commit  string      // the creation commit
+	id      string      // the fork id that commit carries, "" for a rename's, which keeps the one the skill's history records
 	targets []placeTarget
 	// scanned scans the machine once, the first time it is asked, and
 	// inventory keeps what it found.
@@ -206,6 +207,37 @@ func (inv *invocation) forkOf(ctx context.Context, fk *forking, src forkSource, 
 // makeFork writes the creation commit of the fork planFork planned and
 // applies the fork in one journaled mutation, then reports it.
 func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
+	if err := inv.writeFork(ctx, fk); err != nil {
+		return err
+	}
+	var done placements
+	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error { return inv.landFork(ctx, fk, &done) }); err != nil {
+		return mutationFailure(err)
+	}
+	if fk.mode == modeAdopt {
+		return inv.reportAdoptedOwn(ctx, fk, done)
+	}
+	return inv.reportForked(ctx, fk, done)
+}
+
+// landFork applies the fork writeFork wrote the creation commit of, under
+// the lock its caller took, and records it in the installs file. done
+// takes the placements it made.
+func (inv *invocation) landFork(ctx context.Context, fk *forking, done *placements) error {
+	err := inv.applyFork(ctx, fk, done)
+	if errors.Is(err, home.ErrMovedBeforeApply) {
+		return fk.changed()
+	}
+	if err != nil {
+		return mutationFailure(err)
+	}
+	inv.recordInstalls(fk.installs(fk.id))
+	return nil
+}
+
+// writeFork writes the creation commit of the fork planFork planned, before
+// the lock, so that landFork has one to create the fork's branch at.
+func (inv *invocation) writeFork(ctx context.Context, fk *forking) error {
 	src := fk.src
 	gitDir, _, err := gitx.OpenStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -256,6 +288,7 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 			message.trailers = lineage.ForkTrailers{}
 		}
 	}
+	fk.id = message.trailers.ForkID
 	if fk.commit, err = w.commit(ctx, root, parents, message); err != nil {
 		return storeFailure(err)
 	}
@@ -278,24 +311,7 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 		}
 		fk.src.rec, fk.site, fk.judged, fk.record = site.rec, site, judged, nil
 	}
-	var done placements
-	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		if err := inv.applyFork(ctx, fk, &done); err != nil {
-			return err
-		}
-		inv.recordInstalls(fk.installs(message.trailers.ForkID))
-		return nil
-	})
-	if errors.Is(err, home.ErrMovedBeforeApply) {
-		return fk.changed()
-	}
-	if err != nil {
-		return mutationFailure(err)
-	}
-	if fk.mode == modeAdopt {
-		return inv.reportAdoptedOwn(ctx, fk, done)
-	}
-	return inv.reportForked(ctx, fk, done)
+	return nil
 }
 
 // installs is what the applied fork fk did to the library, for the

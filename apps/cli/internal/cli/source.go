@@ -251,21 +251,68 @@ func (inv *invocation) sshHosts(ctx context.Context) func(host string) string {
 // install reads the listing that fetch built. The hub naming the
 // source's repository refuses it, exit 6, before anything is written.
 func (inv *invocation) addSource(ctx context.Context, src source.Source) (listing source.Listing, entry home.Source, err error) {
+	f, err := inv.fetchSource(ctx, src)
+	if err != nil {
+		return listing, entry, err
+	}
+	// The remote went in under an earlier hold of the lock. Only a run
+	// whose record never ran – the lock was never won, or an earlier
+	// mutation's recovery refused first – has a remote left to take back
+	// out here, and that one has to wait for the lock to do it.
+	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), f.record); err != nil {
+		if !f.settled {
+			return f.listing, f.entry, f.takeBack(err)
+		}
+		return f.listing, f.entry, err
+	}
+	f.report()
+	return f.listing, f.entry, nil
+}
+
+// fetchedSource is a source whose remote is written and fetched and whose
+// settings entry is not written yet: the first half of an add, see
+// fetchSource. The run that holds one owes it either record, under the
+// lock, or takeBack.
+type fetchedSource struct {
+	listing source.Listing // what the fetch found
+	entry   home.Source    // the entry record writes, and, once it ran, the entry it wrote
+	// settled says record ran, so what becomes of the remote is decided:
+	// the entry is written and the remote belongs to it, or record took the
+	// remote back under the lock its caller held.
+	settled bool
+	// record writes the settings entry. It runs under the exclusive lock,
+	// and takes the remote back itself when it refuses or fails.
+	record func() error
+	// report emits the source event and prints the confirmation of an add
+	// that record wrote.
+	report func()
+	// takeBack removes the remote, under a hold of the lock of its own, for
+	// a run that ends before record ran. It returns cause, or the refusal
+	// that names what stayed behind.
+	takeBack func(cause error) error
+}
+
+// fetchSource is the first half of an add: it writes the source's remote
+// under a hold of the lock that signals nothing, fetches it outside the
+// lock, and asks what this machine may do at it. Nothing the settings hold
+// changes until the record of the source it returns runs.
+func (inv *invocation) fetchSource(ctx context.Context, src source.Source) (*fetchedSource, error) {
 	started := time.Now().UTC().Format(time.RFC3339) // a source is added when its add starts, so that adds run together keep the order they were started in
 	before, err := inv.loadSettings()
 	if err != nil {
-		return listing, entry, err
+		return nil, err
 	}
 	existing := before.FindSource(src.URL)
 	// want is the entry the remote is written for.
 	want := home.Source{URL: src.URL, Pin: src.Ref}
 	if f := forkSourceRefusal(before, want, inv.sshHosts(ctx)); f != nil {
-		return listing, entry, f
+		return nil, f
 	}
 	gitDir, _, err := gitx.OpenStore(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return listing, entry, storeFailure(err)
+		return nil, storeFailure(err)
 	}
+	f := &fetchedSource{}
 	remote := source.RemoteName(src.ID())
 	// revert takes back the remote this add is about to write, for a run
 	// that gets no further: a source that was not there before goes
@@ -300,7 +347,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 		if src.Ref == before.Sources[existing].Pin {
 			return nil
 		}
-		return source.Unpublish(undo, inv.git, gitDir, src, listing)
+		return source.Unpublish(undo, inv.git, gitDir, src, f.listing)
 	}
 	// left answers for a take-back: cause, the failure that stopped the
 	// run, when the remote went back, and the refusal that names what stayed
@@ -320,7 +367,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// it: undo carries no cancellation, deliberately, since a stop that
 	// shortened this wait would leave behind the very remote it is here to
 	// take back. A run that will not stop still answers a second signal.
-	takeBack := func(cause error) error {
+	f.takeBack = func(cause error) error {
 		inv.out.debugf("taking back the remote %s of %s: %v", remote, src.URL, cause)
 		waiting, cancel := context.WithTimeout(undo, takeBackBound(ctx))
 		defer cancel()
@@ -334,74 +381,61 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
 		return source.Configure(ctx, inv.git, gitDir, want)
 	}); err != nil {
-		return listing, entry, storeFailure(err)
+		return nil, storeFailure(err)
 	}
-	listing, err = source.Fetch(ctx, inv.git, gitDir, src)
+	f.listing, err = source.Fetch(ctx, inv.git, gitDir, src)
 	if err != nil {
-		return listing, entry, takeBack(sourceFailure(err, src))
+		return nil, f.takeBack(sourceFailure(err, src))
 	}
 	// What this machine may do at the source is asked once it is fetched,
 	// so that a URL that cannot be read is refused for that first, and
 	// outside the lock, since it is network. Its answer goes into the one
-	// settings write below. A stop during the check stops the add, and
+	// settings write of record. A stop during the check stops the add, and
 	// the take-back of an add at another pin puts the source ref back
 	// where this fetch found it.
 	check := inv.checkSource(ctx, want)
 	if err := ctx.Err(); err != nil {
-		return listing, entry, takeBack(err)
+		return nil, f.takeBack(err)
 	}
-	entry = home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339), Added: started}
-	check.apply(&entry)
+	f.entry = home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339), Added: started}
+	check.apply(&f.entry)
 	// The remote went in under an earlier hold of the lock. Left behind by
 	// a run that gets no further, it is a remote for a source the machine
 	// does not know about, and since `source fetch` and `source skills`
 	// both answer from the settings, nothing would ever name it again or
 	// clean it up. A refusal cleans up after itself, as a failed fetch
-	// already does.
-	//
-	// settled says the body below ran, so what becomes of the remote is
-	// decided already: either the entry is written and the remote belongs
-	// to it, or the body took the remote back under the lock it was holding
-	// anyway. Taking it back there rather than afterwards is what makes the
-	// cleanup free, since the lock this run has is the lock it would
-	// otherwise have to wait for.
-	//
-	// Only a run whose body never ran – the lock was never won, or an
-	// earlier mutation's recovery refused first – has a remote left to take
-	// back out here, and that one has to wait for the lock to do it.
-	added, settled := true, false
-	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		settled = true
+	// already does: record takes the remote back under the lock it runs
+	// under, which is what makes the cleanup free, since that lock is the
+	// one the run would otherwise have to wait for.
+	added := true
+	f.record = func() error {
+		f.settled = true
 		s, err := inv.loadSettings()
 		if err != nil {
 			return left(err, revert())
 		}
-		if f := forkSourceRefusal(s, want, inv.sshHosts(ctx)); f != nil {
-			return left(f, revert())
+		if refusal := forkSourceRefusal(s, want, inv.sshHosts(ctx)); refusal != nil {
+			return left(refusal, revert())
 		}
 		if i := s.FindSource(src.URL); i >= 0 {
 			added = false
-			entry = entry.Merge(s.Sources[i]) // what the source's entry knows and this add did not find out is kept
+			f.entry = f.entry.Merge(s.Sources[i]) // what the source's entry knows and this add did not find out is kept
 		}
-		s.SetSource(entry)
+		s.SetSource(f.entry)
 		if err := home.SaveSettings(inv.dirs.Home, s); err != nil {
 			return left(err, revert())
 		}
 		return nil
-	})
-	if err != nil {
-		if !settled {
-			return listing, entry, takeBack(err)
-		}
-		return listing, entry, err
 	}
-	check.report(inv, src.URL)
-	n := len(listing.Skills)
-	ev := entryEvent(entry)
-	ev.Subpath, ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = src.Subpath, listing.Commit, movedFrom(listing), &n, check.reason()
-	inv.out.emit(ev)
-	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
-	return listing, entry, nil
+	f.report = func() {
+		check.report(inv, src.URL)
+		n := len(f.listing.Skills)
+		ev := entryEvent(f.entry)
+		ev.Subpath, ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = src.Subpath, f.listing.Commit, movedFrom(f.listing), &n, check.reason()
+		inv.out.emit(ev)
+		inv.out.done(inv.addLine(added, src, f.listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
+	}
+	return f, nil
 }
 
 // movedFrom is the previous_commit an event carries: what the source ref

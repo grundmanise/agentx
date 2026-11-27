@@ -13,6 +13,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
@@ -886,6 +887,13 @@ func (inv *invocation) reportAdoptedOwn(ctx context.Context, fk *forking, done p
 	if err != nil {
 		return err
 	}
+	return inv.reportAdoptedOwnIn(ctx, inventory, sc, fk, done)
+}
+
+// reportAdoptedOwnIn is reportAdoptedOwn against a rescan its caller ran
+// and the lineage it read after it, which a run that adopts several skills
+// reads once for them all.
+func (inv *invocation) reportAdoptedOwnIn(ctx context.Context, inventory scan.Inventory, sc skillContext, fk *forking, done placements) error {
 	lib, ok := librarySkill(inv.dirs.Library, fk.target)
 	if !ok {
 		return fail(exitInternal, "the library holds no "+fk.target+" after importing it", "run 'agentx doctor' and check the library it names")

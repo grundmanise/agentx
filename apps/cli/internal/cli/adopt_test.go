@@ -632,7 +632,7 @@ func TestChooseAdoptions(t *testing.T) {
 		exit        int
 	}{
 		{"by name", adoptSelection{names: names}, "alpha beta", "notes", 0},
-		{"by name, of one tool", adoptSelection{tool: toolVercel, names: names}, "", "", exitNotFound.exit},
+		{"by name, of one tool", adoptSelection{tools: map[string]bool{toolVercel: true}, names: names}, "", "", exitNotFound.exit},
 		{"every record", adoptSelection{all: true}, "alpha beta", "", 0},
 	} {
 		chosen, own, err := (&invocation{}).chooseAdoptions(cands, nil, tc.sel)

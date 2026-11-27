@@ -61,6 +61,12 @@ agentx skill import --from skillshare
 agentx skill import --from skillshare --all
 ```
 
+To look at the skills of both tools, and leave out the skills no tool installed, give `--from` once for each tool:
+
+```sh
+agentx skill import --from skills-cli --from skillshare --all
+```
+
 ## Import skills
 
 Import every skill under `Ready to import`:
@@ -91,10 +97,11 @@ Imported 4 skills; 2 could not be imported.
 ```
 
 - agentx first imports the skills it keeps as they are, in alphabetical order, then installs the others from their sources.
+- agentx changes this machine one time. It first fetches the sources and reads the skills. Then it adds the sources and imports all the skills together, so the desktop app shows them all at the same moment.
 - `--all` lists the skills it could not import under `Could not import`, with the same reasons as the preview, and exits with code 0. Do what each row says, then run `agentx skill import --all` again.
 - If something else goes wrong, such as a source agentx cannot fetch, agentx still imports the other skills, names the one that failed and exits with a non-zero code. See [When a run stops](#when-a-run-stops).
 - The line about publishing shows while no [hub](/hub) is set. See [Publish an imported skill](#publish-an-imported-skill).
-- With `--from`, `--all` imports the skills that tool installed and nothing else.
+- With `--from`, `--all` imports the skills that tool installed and nothing else. With `--from` for each tool, it imports the skills of both tools in one run.
 - When every skill is imported already and none is left that agentx cannot import, agentx prints `Already imported.`
 
 Or name the skills:
@@ -275,6 +282,8 @@ These causes stop a run that names the skill, and `--all` too. agentx still impo
 |---|---|---|
 | agentx cannot fetch the source | 3 | Check the URL and your credentials, then run the command again. |
 | The source no longer holds the skill at the path the record names | 5 | Leave the skill unmanaged, or install another skill with `agentx skill add`. |
+
+If a run stops before it imports the skills, for example because you stop it or because another agentx command is running, it removes the sources it fetched, and the skills stay unmanaged. Run the command again.
 
 A name agentx cannot find stops with exit code 5:
 
