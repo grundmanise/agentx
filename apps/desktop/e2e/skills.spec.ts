@@ -847,12 +847,14 @@ test.describe("the detail pane", () => {
     await expect(sheet).toBeHidden();
     // The skill was read once: selecting it again does not read it again.
     await row(page, "pdf").click();
-    await row(page, "pdf-letters").click();
-    await expect(article.getByRole("list", { name: "History" })).toBeVisible();
-    expect(later(cli)).toEqual([
+    const reads = [
       ["skill", "show", "pdf-letters", "--json"],
       ["skill", "show", "pdf", "--json"],
-    ]);
+    ];
+    await expect.poll(() => later(cli)).toEqual(reads);
+    await row(page, "pdf-letters").click();
+    await expect(article.getByRole("list", { name: "History" })).toBeVisible();
+    expect(later(cli)).toEqual(reads);
 
     // The skill changes and it cannot be read: the pane says so.
     cli.register(["skill", "show", "pdf-letters"], { exitCode: 1 });
