@@ -523,13 +523,15 @@ export const SourcesScreen = () => {
   } = useAgentTargets();
 
   /**
-   * Runs the plans one after another, `addedBefore` skills having landed so far and `before` of
-   * `of` plans having ended. True when every plan ran to the end with exit code 0. Retry after
-   * the lock runs `retry` with the plan.
+   * Runs the plans one after another, `so` far: the skills that landed, the warnings of the plans
+   * that ended with exit code 0, and whether one did not; `before` of `of` plans having ended.
+   * The toast once every plan has ended with exit code 0 counts the skills of them all, its
+   * warnings each once, since one toast replaces another. True when every plan ran to the end
+   * with exit code 0. Retry after the lock runs `retry` with the plan.
    */
   const runPlans = async (
     plans: AddPlan[],
-    addedBefore: number,
+    so: { added: number; warnings: string[]; failed: boolean },
     before: number,
     of: number,
     retry: (plan: AddPlan) => void
@@ -556,7 +558,14 @@ export const SourcesScreen = () => {
       retry: () => {
         retry(plan);
       },
-      success: () => `Added ${count(plan.names.length, "skill")}`,
+      // A plan with more after it, or after one that failed, leaves the toast to the last one.
+      success: () =>
+        rest.length > 0 || so.failed
+          ? undefined
+          : `Added ${count(so.added + plan.names.length, "skill")}`,
+      warnings: (logs) => [
+        ...new Set([...so.warnings, ...logs.map((l) => l.message)]),
+      ],
     });
     const installed = outcome.events
       .filter((e) => e.type === "library_skill")
@@ -565,7 +574,7 @@ export const SourcesScreen = () => {
       const steps = outcome.events.filter(
         (e) => e.type === "progress" && e.phase === "install"
       ).length;
-      const added = addedBefore + steps;
+      const added = so.added + steps;
       notify(
         `Stopped. ${count(added, "skill")} ${added === 1 ? "was" : "were"} added.`
       );
@@ -602,23 +611,41 @@ export const SourcesScreen = () => {
         );
       }
     }
+    const ok = outcome.exitCode === 0;
     const restOk = await runPlans(
       rest,
-      addedBefore + installed.length,
+      {
+        added: so.added + installed.length,
+        failed: so.failed || !ok,
+        warnings: ok
+          ? [
+              ...so.warnings,
+              ...outcome.logs
+                .filter((l) => l.level === "warn")
+                .map((l) => l.message),
+            ]
+          : so.warnings,
+      },
       before + 1,
       of,
       retry
     );
-    return outcome.exitCode === 0 && restOk;
+    return ok && restOk;
   };
 
   /** Runs the plans as one install, its progress on the bar's rim. */
   const install = async (plans: AddPlan[]) => {
     setRim({ fraction: 0, state: "running" });
     // Retry after the lock runs the plan as an install of its own, so its rim ends too.
-    const ok = await runPlans(plans, 0, 0, plans.length, (plan) => {
-      void install([plan]);
-    });
+    const ok = await runPlans(
+      plans,
+      { added: 0, failed: false, warnings: [] },
+      0,
+      plans.length,
+      (plan) => {
+        void install([plan]);
+      }
+    );
     // The rim fills and fades, or drains, before the bar may close (DESIGN.md §8 "Progress rim").
     setRim({ fraction: ok ? 1 : 0, state: ok ? "done" : "stopped" });
   };

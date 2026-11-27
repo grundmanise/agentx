@@ -1,7 +1,8 @@
 // The install targets of a `skill add` (DESIGN.md §6 "Agent picker"): the Universal stack, locked
 // on, then "Add to" and round logo toggles, at most five, the rest behind a "+n" button that opens
-// the agent picker. The Add skills bar of Sources and the Add skill dialog show it; `useAgentTargets` holds the choice, which starts as the
-// enabled configurations, where `skill add` installs when no agent is named.
+// the agent picker. The Add skills bar of Sources shows it; `useAgentTargets` holds the choice, also
+// for the Add skill dialog's agent step, and starts as the enabled configurations, where `skill add`
+// installs when no agent is named.
 import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -32,7 +33,7 @@ const noConfigurations: Configuration[] = [];
  * The install targets the user chose, from the inventory's configurations: the enabled ones
  * that take a placement until the user changes them. `direct` are the configurations that take a
  * placement, `universal` those whose client reads the library, `chosen` the ids of the targets in
- * inventory order, and `enabled` the ids of the enabled ones, for `toFlags`.
+ * inventory order, and `enabled` the ids of the enabled ones, for `toFlags`. `choose` sets the targets at once.
  */
 export const useAgentTargets = () => {
   const configurations =
@@ -52,7 +53,15 @@ export const useAgentTargets = () => {
   const clear = () => {
     setTargets([]);
   };
-  return { chosen, clear, direct, enabled, toggle, universal };
+  return {
+    choose: setTargets,
+    chosen,
+    clear,
+    direct,
+    enabled,
+    toggle,
+    universal,
+  };
 };
 
 /** The ids of `direct`, the chosen ones first, each group in inventory order. */

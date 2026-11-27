@@ -1412,7 +1412,7 @@ test("Hub lists the hub's installable skills and adds by name", async ({
   ]);
 });
 
-test("the selection stays across sources, and Add adds each source's part", async ({
+test("the selection stays across sources, and Add adds each source's part, with one toast for them all", async ({
   cli,
   page,
 }) => {
@@ -1443,6 +1443,9 @@ test("the selection stays across sources, and Add adds each source's part", asyn
     "xlsx",
   ];
   const hub = ["skill", "add", "--name", "release-notes"];
+  // Each add warns of the same hub skill: the toast lists it once.
+  const warning =
+    "/home/me/.agents/skills/notes is in the way of notes's library symlink";
   cli.register(all, {
     events: [
       { name: "artifacts", type: "library_skill" },
@@ -1450,11 +1453,18 @@ test("the selection stays across sources, and Add adds each source's part", asyn
       { name: "forms", type: "library_skill" },
       { name: "slides", type: "library_skill" },
     ],
+    logs: [{ level: "warn", message: warning }],
   });
   cli.register(hub, {
     events: [{ name: "release-notes", type: "library_skill" }],
+    logs: [{ level: "warn", message: warning }],
   });
   await bar(page).getByRole("button", { name: "Add 5" }).click();
+  const toast = toasts(page)
+    .getByRole("listitem")
+    .filter({ hasText: "Added 5 skills" });
+  await expect(toast).toBeVisible();
+  await expect(toast.getByText(warning)).toHaveCount(1);
   await expect(bar(page)).toBeHidden();
   expect(commandLines(cli)).toEqual(
     expect.arrayContaining([all.join(" "), hub.join(" ")])

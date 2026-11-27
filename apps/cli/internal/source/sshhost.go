@@ -2,12 +2,12 @@ package source
 
 import (
 	"context"
-	"os/exec"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/proc"
 )
 
 // sshHostWait bounds one ssh -G. It reads configuration files and opens no
@@ -39,15 +39,20 @@ func SSHHosts(ctx context.Context, env map[string]string) func(host string) stri
 			return name
 		}
 		name := host
-		wait, cancel := context.WithTimeout(ctx, sshHostWait)
-		defer cancel()
 		// No terminal, no input: ssh -G asks for nothing, and a command a
 		// Match exec runs gets nothing to read either.
-		cmd := exec.CommandContext(wait, ssh, "-G", "--", host)
-		cmd.Env = vars
-		cmd.WaitDelay = time.Second
-		if out, err := cmd.Output(); err == nil {
-			if resolved := sshHostname(string(out)); resolved != "" {
+		var out strings.Builder
+		res, err := proc.Run(ctx, proc.Command{
+			Path: ssh, Args: []string{"-G", "--", host}, Env: vars,
+			Deadline: sshHostWait, Grace: time.Second,
+		}, func(stream string, text []byte) {
+			if stream == proc.Stdout {
+				out.Write(text)
+				out.WriteByte('\n')
+			}
+		})
+		if err == nil && res.ExitCode != nil && *res.ExitCode == 0 {
+			if resolved := sshHostname(out.String()); resolved != "" {
 				name = resolved
 			}
 		}
