@@ -20,21 +20,23 @@ Select a pill to open the source. Its card shows:
 
 Under the card, the source's skills are listed one per row, with a line of each skill's description.
 
-To look in every source at once, type in **Search all sources**. The card of the open source stays while you search.
+To look in every source at once, type in **Search all sources**. The matches of the open source take the place of its card, and each source's pill shows how many skills match in it. Select another source to see its matches: the search stays until you clear the field, refresh all sources or add a source. **Hub** shows the skills on your hub that match and are not on this machine yet.
 
 ## Read a skill before you add it
 
-Select a skill's row to open it. The row shows a spinner while it reads the skill's `SKILL.md`, then opens to show it. Select **See full skill**, next to the skill's name, to open the skill's folder in its repository in your browser. Select the row again to close it. You can keep several open.
+Select a skill's row to open it. The row shows a spinner while it reads the skill's `SKILL.md`, then opens to show it. Select the skill's path, next to its name, to open the skill's folder in its repository in your browser. A long path shows its end. Select the row again to close it. You can keep several open.
 
 For a skill you cannot add, the open row says why. A skill under **Hub** shows its description only.
 
 ## Add skills
 
-1. Select the round check at the end of each skill you want, or select the **Select all** checkbox above them, at the right, to select every skill you do not have yet. Select it again once all are selected to clear the selection.
+1. Select the round check at the end of each skill you want, or select the **Select all** checkbox above them, at the right, to select every skill you do not have yet. Select it again once all are selected to clear the selection. Your selection stays when you open another source, so you can pick skills from several sources and add them together.
 2. In the bar at the bottom, choose the agents to add them to. Universal agents, marked with a lock, always get them.
 3. Select **Add**. While the skills install, the button shows a spinner and a light runs around the bar. To stop, point at the button and select **Stop**.
 
 Skills this machine already has show their status in place of the check, such as **Added**, and you cannot select them. Skills stay in A to Z order when you add them.
+
+A source can hold two skills with the same name, such as one copy for each agent. Your library holds one skill per name, so you can add either one, but not both. Selecting one clears the other, and **Select all** takes the first. Open a row to see where each skill sits in the source.
 
 An added skill shows the date you last added it, such as **Added on Oct 2**, and a skill you removed shows the date you last removed it before its check. Skills added before agentx kept these dates show none.
 
@@ -55,7 +57,7 @@ To get the skill back, add it again from its source.
 5. Under **Add to**, choose the agents to install them in. The enabled agents are chosen to start with. Universal agents, marked with a lock, always get the skills.
 6. Select **Install**.
 
-agentx adds the source to **Sources** only when you install a skill from it. Select **Cancel** to close the dialog without changing anything. Once the skills are installed, the first one is selected in the list.
+agentx adds the source to **Sources** only when you install a skill from it. Select **Cancel** to close the dialog. While Find skills or Install runs, **Cancel** stops it. Once the skills are installed, the first one is selected in the list.
 
 ## Add a source
 
@@ -63,7 +65,7 @@ agentx adds the source to **Sources** only when you install a skill from it. Sel
 2. Paste the repository's URL, or `owner/name` for GitHub. Add `#branch` or `#tag` to pin it.
 3. Select **Add**.
 
-The new source opens with every skill selected.
+The dialog closes, and the source shows with a spinner in the sources row while agentx fetches it. Once it is added, the new source opens with every skill selected. To stop the add, select the source while it shows the spinner.
 
 ## Refresh a source
 

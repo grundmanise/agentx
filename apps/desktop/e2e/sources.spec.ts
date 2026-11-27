@@ -5,7 +5,9 @@ import {
   installableCards,
   installOf,
   listingCards,
+  oneOfEachName,
   planAdds,
+  sameName,
   skillPage,
   webUrl,
 } from "#/screens/sources/projection.ts";
@@ -17,6 +19,7 @@ import {
   acmeSkills,
   configurations,
   docResults,
+  HUB,
   installable,
   inventory,
   library,
@@ -132,10 +135,11 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
   page,
 }) => {
   await openSources(cli, page);
+  // Hub first, then the shared sources.
   expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
     "acme/skills",
     "zeta/tools",
-    "Hub",
   ]);
   await expect(pill(page, "acme/skills")).toHaveAttribute(
     "aria-pressed",
@@ -175,6 +179,7 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
       sources: [
         ...sources,
         {
+          added: new Date().toISOString(),
           id: moreId,
           last_fetched: new Date().toISOString(),
           url: "https://github.com/acme/more",
@@ -183,11 +188,12 @@ test("the sources row: one pill per shared source, Hub, the counts and the stale
     },
   ]);
   await expect(pill(page, "acme/more")).toHaveText("acme/more1");
+  // The shared sources in the order they were added.
   expect(await names(sourcesRow(page))).toEqual([
-    "acme/more",
+    "Hub",
     "acme/skills",
     "zeta/tools",
-    "Hub",
+    "acme/more",
   ]);
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
@@ -238,12 +244,6 @@ test("the open source's card: its name, its full URL linking to the repository, 
   ).toBeVisible();
   await expect(fact(page, "Fetched")).toHaveText("2 hours ago");
   await expect(details(page).getByRole("button")).toHaveText(["Refresh"]);
-
-  // A search answers across every source: the card stays.
-  await page.getByRole("searchbox", { name: "Search all sources" }).fill("pdf");
-  await expect(
-    details(page).getByRole("heading", { name: "me/hub" })
-  ).toBeVisible();
 });
 
 /** acme's skills A to Z, the order the list keeps whatever their state. */
@@ -356,7 +356,7 @@ const drawnRows = async (page: Page) =>
     return rows;
   });
 
-test("a source of plugins whose skills share names: a row each, drawn once, the later of a name in use", async ({
+test("a source of plugins whose skills share names: a row each, drawn once, either of a name selectable", async ({
   cli,
   page,
 }) => {
@@ -385,7 +385,7 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   // A to Z, so the two skills of a name sit side by side, the first of the listing first.
   await expect(row(page, "skill-00").first()).toBeVisible();
   await expect(row(page, "skill-00")).toHaveCount(2);
-  // The later skill of each name is not on this machine, so none counts as added.
+  // Select all takes one skill of each name, and none counts as added.
   await expect(page.getByText("Select all 90")).toBeVisible();
   await expect(page.getByText(/already added/u)).toHaveCount(0);
 
@@ -424,19 +424,26 @@ test("a source of plugins whose skills share names: a row each, drawn once, the 
   drawnNames.sort((a, b) => a.localeCompare(b));
   expect(drawnNames).toEqual(shared.flatMap((name) => [name, name]));
 
-  // The later skill of a name cannot be selected, and says why once open.
-  const second = rowLine(page, "skill-89").last();
-  await expect(second.getByText("Name taken", { exact: true })).toBeVisible();
+  // Either skill of a name can be selected, and selecting one deselects the other.
+  const first = check(page, "skill-89").first();
+  const second = check(page, "skill-89").last();
+  await second.click();
+  await expect(second).toHaveAttribute("aria-pressed", "true");
+  await first.click();
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  await expect(second).toHaveAttribute("aria-pressed", "false");
   await expect(
-    second.getByRole("button", { name: "Select skill-89" })
-  ).toHaveCount(0);
+    bar(page).getByRole("button", { exact: true, name: "Add 1" })
+  ).toBeVisible();
+
+  // The open row links to the skill's folder in the source.
   cli.register(["source", "read", ACME_ID, "beta/skills/skill-89"], {
     events: [skillMd("skill-89", "# skill-89\n")],
   });
   await row(page, "skill-89").last().click();
-  await expect(opened(page, "skill-89")).toContainText(
-    "The skill at alpha/skills/skill-89 in this source is named skill-89 too, and only the first of a name can be added."
-  );
+  await expect(
+    page.getByRole("link", { exact: true, name: "beta/skills/skill-89" })
+  ).toBeVisible();
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
     `source read ${ACME_ID} beta/skills/skill-89`,
@@ -521,7 +528,7 @@ test("opening a row reads its SKILL.md once, then opens, and links to the skill"
   await expect(
     opened(page, "docx").getByRole("region", { name: "SKILL.md of docx" })
   ).toContainText("# Word documents");
-  await page.getByRole("link", { name: "See full skill" }).click();
+  await page.getByRole("link", { exact: true, name: "skills/docx" }).click();
   expect(cli.openedUrls).toEqual([`${ACME}/tree/3f2a9c1e8d7b6a/skills/docx`]);
   // The row opens and closes on a click; the check alone selects.
   await expect(bar(page)).toHaveCount(0);
@@ -1120,7 +1127,8 @@ test("search asks serve once per settled query and shows only the latest answer"
   ]);
   await expect(row(page, "artifacts")).toBeVisible();
 
-  // The matching answer replaces the listing, grouped by source.
+  // The matching answer takes the place of the source's card and listing: the open source's
+  // matches, each source counting its own, Hub once your skills on the hub are read.
   await cli.serveEmit([
     {
       query: "pdf",
@@ -1129,9 +1137,18 @@ test("search asks serve once per settled query and shows only the latest answer"
       type: "search",
     },
   ]);
-  await expect(grid(page, "zeta/tools")).toBeVisible();
+  await expect(details(page)).toBeHidden();
   expect(await skillNames(grid(page, "acme/skills"))).toEqual(["docx"]);
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills1");
+  await expect(pill(page, "zeta/tools")).toHaveText("zeta/tools1");
+  await expect(pill(page, "Hub")).toHaveText("Hub0");
+
+  // Another source shows its matches, and the search stays.
+  await pill(page, "zeta/tools").click();
   expect(await skillNames(grid(page, "zeta/tools"))).toEqual(["docgen"]);
+  await expect(field).toHaveValue("pdf");
+  await expect(grid(page, "acme/skills")).toHaveCount(0);
+  await pill(page, "acme/skills").click();
 
   // While the next query waits, the last answer stays: the listing does not come back between.
   await field.fill("pdfz");
@@ -1148,25 +1165,73 @@ test("search asks serve once per settled query and shows only the latest answer"
   ]);
   await expect(page.getByText("No skills match")).toBeVisible();
 
-  // Clearing the query shows the listing again, and the next query starts from it.
+  // Clearing the query shows the card and the listing again, and the next query starts from them.
   await field.fill("");
   await expect(row(page, "artifacts")).toBeVisible();
+  await expect(details(page)).toBeVisible();
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills8");
   await field.fill("x");
   await expect.poll(() => cli.serveRequests.length).toBe(4);
   await expect(row(page, "artifacts")).toBeVisible();
   await expect(page.getByText("No skills match")).toHaveCount(0);
 });
 
-test("Add source runs source add, then opens the new source fully preselected", async ({
+/** A fork on the hub as a search answers it: under the hub's URL, by its branch's name. */
+const hubFork = (name: string) => ({
+  description: `The ${name} skill`,
+  name,
+  source: HUB,
+  subpath: "",
+  tree: `t-${name}`,
+});
+
+test("a search covers your skills on the hub: Hub counts and lists the ones to install that match", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await pill(page, "Hub").click();
+  await expect(
+    details(page).getByRole("heading", { name: "me/hub" })
+  ).toBeVisible();
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("pdf");
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+  await cli.serveEmit([
+    {
+      query: "pdf",
+      request_id: lastSearch(cli).request_id,
+      // A fork this machine holds already is not one the hub lists to install.
+      results: [...docResults, hubFork("held-pdf"), hubFork("my-pdf")],
+      type: "search",
+    },
+  ]);
+  await expect(details(page)).toBeHidden();
+  await expect(pill(page, "Hub")).toHaveAttribute("aria-pressed", "true");
+  await expect(pill(page, "Hub")).toHaveText("Hub1");
+  expect(await skillNames(grid(page, "Hub"))).toEqual(["my-pdf"]);
+
+  await field.fill("");
+  await expect(
+    details(page).getByRole("heading", { name: "me/hub" })
+  ).toBeVisible();
+  expect(await skillNames(grid(page, "Hub"))).toEqual([
+    "my-pdf",
+    "release-notes",
+  ]);
+});
+
+test("Add source closes at once and shows the source loading, then opens it fully preselected", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
   const newId = "9f8e7d6c5b4a3210";
   const newUrl = "https://github.com/acme/more";
-  cli.register(["source", "add", "acme/more"], {
+  const adding = cli.register(["source", "add", "acme/more"], {
     events: [
       {
+        added: new Date().toISOString(),
         id: newId,
         last_fetched: new Date().toISOString(),
         skills: 2,
@@ -1174,6 +1239,7 @@ test("Add source runs source add, then opens the new source fully preselected", 
         url: newUrl,
       },
     ],
+    holdAfter: 0,
   });
   cli.register(["source", "skills", newId], {
     events: [
@@ -1195,17 +1261,47 @@ test("Add source runs source add, then opens the new source fully preselected", 
       },
     ],
   });
+  // A search stays while the dialog is open, and ends once the source is added.
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("doc");
   await page.getByRole("button", { name: "Add source" }).click();
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page)).toContainText("Add #branch or #tag to pin it");
   await expect(urlField(page)).toBeFocused();
+  // The dialog hides the page from the accessibility tree.
+  await expect(
+    page.getByRole("searchbox", {
+      includeHidden: true,
+      name: "Search all sources",
+    })
+  ).toHaveValue("doc");
   await urlField(page).fill("acme/more");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   await expect(dialog(page)).toHaveCount(0);
+  await adding.started;
+  const loading = pill(page, "Stop adding acme/more");
+  await expect(loading).toHaveAttribute("aria-busy", "true");
+  await expect(loading).toHaveText("acme/more");
+  // It takes the place the source's own pill will take, so nothing moves once it is added.
+  expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
+    "acme/skills",
+    "zeta/tools",
+    "Stop adding acme/more",
+  ]);
+  adding.release();
   await expect(
     toasts(page).getByText(`Added ${newUrl}: 2 skills`)
   ).toBeVisible();
+  await expect(loading).toHaveCount(0);
   await expect(pill(page, "acme/more")).toHaveAttribute("aria-pressed", "true");
+  await expect(field).toHaveValue("");
+  expect(await names(sourcesRow(page))).toEqual([
+    "Hub",
+    "acme/skills",
+    "zeta/tools",
+    "acme/more",
+  ]);
   await expect(check(page, "review")).toHaveAttribute("aria-pressed", "true");
   await expect(check(page, "triage")).toHaveAttribute("aria-pressed", "true");
   await expect(
@@ -1229,7 +1325,28 @@ test("Add source runs source add, then opens the new source fully preselected", 
   await expect(toasts(page).getByText("Added 2 skills")).toBeVisible();
 });
 
-test("Add source shows a source git cannot reach, and the CLI's refusals, under the field", async ({
+test("the pill of a source being added stops the add", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  const adding = cli.register(["source", "add", "acme/slow"], {
+    events: [],
+    holdAfter: 0,
+  });
+  await page.getByRole("button", { name: "Add source" }).click();
+  await urlField(page).fill("acme/slow");
+  await dialog(page).getByRole("button", { name: "Add" }).click();
+  await adding.started;
+  await pill(page, "Stop adding acme/slow").click();
+  await expect(
+    toasts(page).getByText("Stopped", { exact: true })
+  ).toBeVisible();
+  expect(cli.cancels).toHaveLength(1);
+  await expect(pill(page, "Stop adding acme/slow")).toHaveCount(0);
+});
+
+test("Add source shows a source git cannot reach, and the CLI's refusals, in a toast", async ({
   cli,
   page,
 }) => {
@@ -1261,19 +1378,24 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
   await page.getByRole("button", { name: "Add source" }).click();
   await urlField(page).fill("bad/repo");
   await dialog(page).getByRole("button", { name: "Add" }).click();
-  const alert = dialog(page).getByRole("alert");
   // The message and the CLI's hint, as one sentence-cased paragraph.
-  await expect(alert).toHaveText(
-    "Couldn't reach bad/repo. Check that the repository exists and that you can read it."
-  );
+  await expect(
+    toasts(page).getByText(
+      "Couldn't reach bad/repo. Check that the repository exists and that you can read it.",
+      { exact: true }
+    )
+  ).toBeVisible();
 
+  await page.getByRole("button", { name: "Add source" }).click();
   await urlField(page).fill("me/hub");
   await dialog(page).getByRole("button", { name: "Add" }).click();
-  // The CLI's hint names commands: the dialog names the place in the app instead.
-  await expect(alert).toHaveText(
-    "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub."
-  );
-  await expect(dialog(page)).toBeVisible();
+  // The CLI's hint names commands: the toast names the place in the app instead.
+  await expect(
+    toasts(page).getByText(
+      "https://github.com/me/hub is the hub: it holds one branch per skill rather than skills on one branch. See and install its skills under Hub.",
+      { exact: true }
+    )
+  ).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([
     "source add bad/repo",
     "source add me/hub",
@@ -1308,6 +1430,55 @@ test("Hub lists the hub's installable skills and adds by name", async ({
     "skill list --remote",
     "skill add --name release-notes",
   ]);
+});
+
+test("the selection stays across sources, and Add adds each source's part", async ({
+  cli,
+  page,
+}) => {
+  await openSources(cli, page);
+  await selectAll(page).click();
+  await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
+  await pill(page, "Hub").click();
+  await expect(row(page, "release-notes")).toBeVisible();
+  await check(page, "release-notes").click();
+  await expect(
+    bar(page).getByRole("button", { exact: true, name: "Add 5" })
+  ).toBeVisible();
+  await pill(page, "acme/skills").click();
+  await expect(selectAll(page)).toHaveAccessibleName("All 4 selected");
+
+  const all = [
+    "skill",
+    "add",
+    ACME,
+    "--all",
+    "--except",
+    "letters",
+    "--except",
+    "pdf",
+    "--except",
+    "scratch",
+    "--except",
+    "xlsx",
+  ];
+  const hub = ["skill", "add", "--name", "release-notes"];
+  cli.register(all, {
+    events: [
+      { name: "artifacts", type: "library_skill" },
+      { name: "docx", type: "library_skill" },
+      { name: "forms", type: "library_skill" },
+      { name: "slides", type: "library_skill" },
+    ],
+  });
+  cli.register(hub, {
+    events: [{ name: "release-notes", type: "library_skill" }],
+  });
+  await bar(page).getByRole("button", { name: "Add 5" }).click();
+  await expect(bar(page)).toBeHidden();
+  expect(commandLines(cli)).toEqual(
+    expect.arrayContaining([all.join(" "), hub.join(" ")])
+  );
 });
 
 test("Refresh fetches the source, then reads the listing of the new fetch", async ({
@@ -1358,7 +1529,11 @@ test("Refresh all fetches every source in one run, then reads your skills, pendi
     holdAfter: 0,
   });
   const refreshAll = page.getByRole("button", { name: "Refresh all" });
+  // Refresh all ends a search.
+  const field = page.getByRole("searchbox", { name: "Search all sources" });
+  await field.fill("doc");
   await refreshAll.click();
+  await expect(field).toHaveValue("");
   await fetch.started;
   await expect(refreshAll).toHaveAttribute("aria-busy", "true");
   await expect(refreshAll).toBeDisabled();
@@ -1514,7 +1689,7 @@ test("Remove alone removes the source and keeps its skills", async ({
   ]);
 });
 
-test("Select all in a source whose skills share a name: --all keeps the selected one of the name", () => {
+test("a source whose skills share a name: either can be selected, the other left out by its folder", () => {
   const listing: SourceSkillEvent[] = [
     ["alpha/pdf", "pdf"],
     ["beta/pdf", "pdf"],
@@ -1529,22 +1704,47 @@ test("Select all in a source whose skills share a name: --all keeps the selected
     type: "source_skill",
   }));
   const cards = listingCards(listing, ACME, []);
-  const selectable = cards.filter((c) => c.status === undefined);
-  expect(selectable.map((c) => c.skillMd?.subpath)).toEqual([
+  const [alpha, beta, format] = cards;
+  if (alpha === undefined || beta === undefined || format === undefined) {
+    throw new Error("three cards");
+  }
+  expect(cards.every((c) => c.status === undefined)).toBe(true);
+  expect(oneOfEachName(cards).map((c) => c.skillMd?.subpath)).toEqual([
     "alpha/pdf",
     "format",
   ]);
+  expect(sameName(alpha, beta)).toBe(true);
+  expect(sameName(alpha, format)).toBe(false);
   const plan = (selected: typeof cards) =>
     planAdds({
-      allOf: { cards, source: ACME },
+      allOf: new Map([[ACME, cards]]),
       enabled: [],
       selected,
       targets: [],
     }).map((p) => p.args);
-  expect(plan(selectable)).toEqual([["skill", "add", ACME, "--all"]]);
-  expect(plan(selectable.filter((c) => c.name !== "pdf"))).toEqual([
-    ["skill", "add", ACME, "--all", "--except", "pdf", "--except", "pdf"],
+  expect(plan([alpha, format])).toEqual([
+    ["skill", "add", ACME, "--all", "--except", "beta/pdf"],
   ]);
+  expect(plan([beta, format])).toEqual([
+    ["skill", "add", ACME, "--all", "--except", "alpha/pdf"],
+  ]);
+  expect(plan([format])).toEqual([
+    [
+      "skill",
+      "add",
+      ACME,
+      "--all",
+      "--except",
+      "alpha/pdf",
+      "--except",
+      "beta/pdf",
+    ],
+  ]);
+  expect(
+    planAdds({ enabled: [], selected: [beta, format], targets: [] }).map(
+      (p) => p.args
+    )
+  ).toEqual([["skill", "add", ACME, "--name", "format", "--name", "beta/pdf"]]);
 });
 
 test("the repository link of a source URL", () => {

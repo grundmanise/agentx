@@ -243,7 +243,7 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	equal(t, "the settings the branch is born with", fmt.Sprint(born["schema_version"], born["ignore_system_files"], born["copy_mode"]), "1 true map[]")
 	sources := born["sources"].([]any)
 	equal(t, "the sources it is born with", len(sources), 1)
-	equal(t, "the hub entry's fields, without the access", keysOf(sources[0].(map[string]any)), "hub,last_fetched,url")
+	equal(t, "the hub entry's fields, without the access", keysOf(sources[0].(map[string]any)), "added,hub,last_fetched,url")
 	equal(t, "the hub entry's URL", sources[0].(map[string]any)["url"], hub.URL)
 
 	text := h.run("skill", "remove", "alpha", "--machine", "cloud", "--from", "cortex")

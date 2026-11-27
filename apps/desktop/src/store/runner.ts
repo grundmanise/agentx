@@ -135,13 +135,29 @@ const setPending = (label: string, runId: string | undefined) => {
 export const usePending = (label: string) =>
   useAppStore((s) => Object.hasOwn(s.pending, label));
 
-/** Stops the command of the control named `label`; it ends with code 9. */
-export const cancelCommand = async (label: string) => {
-  const runId = useAppStore.getState().pending[label];
-  if (runId !== undefined) {
-    await cancel(runId);
-  }
+/** Stops the commands of the controls named `labels` that run; each ends with code 9. */
+export const cancelCommand = async (...labels: string[]) => {
+  const { pending } = useAppStore.getState();
+  await Promise.all(
+    labels.flatMap((label) => {
+      const runId = pending[label];
+      return runId === undefined ? [] : [cancel(runId)];
+    })
+  );
 };
+
+/**
+ * The `onOpenChange` of a dialog that runs the commands of `labels`: Cancel, Escape, a click
+ * outside or the close button stop them, then the dialog closes.
+ */
+export const stopOnClose =
+  (labels: readonly string[], onOpenChange: (open: boolean) => void) =>
+  (open: boolean) => {
+    if (!open) {
+      void cancelCommand(...labels);
+    }
+    onOpenChange(open);
+  };
 
 /** The handlers a control follows a command's lines with as they arrive. */
 type Followers = Pick<CommandOptions, "onEvent" | "onLog" | "onProgress">;

@@ -26,8 +26,10 @@ import { formatDate } from "#/lib/dates.ts";
 import { markdownText } from "#/lib/inline-markdown.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { trackAttribute } from "#/lib/track.ts";
+import { cn } from "#/lib/utils.ts";
 import { formatSize } from "#/screens/skills/files.tsx";
 import { openSkill, skillPath } from "#/screens/skills/open.ts";
+import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog } from "#/screens/skills/remove-dialog.tsx";
 import { currentRows, useSkillRows } from "#/screens/skills/rows.ts";
@@ -154,25 +156,34 @@ const SkillMd = ({
 };
 
 /**
- * "See full skill": the skill's directory on its source's web page, opened in the browser, with
- * the external-link icon after it. It sits beside the name in the open row, over the row's
- * trigger, and takes its own clicks.
+ * The skill's directory in its source, a link to it on the source's web page, opened in the
+ * browser, with the external-link icon after it. A long path loses its start, so its folder
+ * stays in view. It sits beside the name in the open row, over the row's trigger, and takes its
+ * own clicks.
  */
-const SeeFullSkill = ({ page }: { page: string }) => (
+const SkillPath = ({ page, path }: { page: string; path: string }) => (
   <a
     href={page}
     title={page}
     {...trackAttribute("sources.skill-see-full")}
-    className="type-secondary text-text-primary pointer-events-auto inline-flex flex-none items-center gap-1 font-medium underline underline-offset-2"
+    className="type-secondary text-text-secondary hover:text-text-primary pointer-events-auto inline-flex min-w-0 items-center gap-1 underline-offset-2 hover:underline"
     onClick={(e) => {
       e.preventDefault();
       void openInBrowser(page);
     }}
   >
-    See full skill
+    <span dir="rtl" className="min-w-0 truncate">
+      <bdi dir="ltr">{path}</bdi>
+    </span>
     <ExternalLinkIcon size="2xs" />
   </a>
 );
+
+/** Where a card's skill sits: its directory in the source, or the source for a skill at its root. */
+const pathOf = (card: SkillCard) => {
+  const subpath = card.skillMd?.subpath ?? "";
+  return subpath === "" ? shortSource(card.source) : subpath;
+};
 
 /** Why a card's name is taken, the skill that holds it a link that opens it in Skills. */
 const TakenText = ({ taken }: { taken: TakenReason }) => (
@@ -331,7 +342,7 @@ const AddedRemove = ({
 
 /**
  * One skill as a card of its own: the row that opens it (the chevron, its name, one line of its
- * description while closed, See full skill beside the name while open) and, at its end, the round
+ * description while closed, the skill's path beside the name while open) and, at its end, the round
  * check that selects it, or for a skill this machine holds already its status, which for an Added
  * skill turns into Remove on hover. Added carries the date of the last add, and the check of a
  * skill this machine removed has the date of the last removal before it, when this machine
@@ -420,15 +431,21 @@ const SkillItemView = ({
         meta={rowMeta(card, date)}
         action={action}
       >
-        {/* The name and See full skill share a baseline, as their sizes differ. */}
+        {/* The name and the path share a baseline, as their sizes differ. */}
         <span className="flex min-w-0 flex-initial items-baseline gap-3">
           <span
             aria-hidden
-            className="type-row-name text-text-primary min-w-0 flex-initial truncate"
+            className={cn(
+              "type-row-name text-text-primary min-w-0 flex-initial truncate",
+              // The path gives way first.
+              open && "shrink-0"
+            )}
           >
             {card.name}
           </span>
-          {open && card.page !== undefined && <SeeFullSkill page={card.page} />}
+          {open && card.page !== undefined && (
+            <SkillPath page={card.page} path={pathOf(card)} />
+          )}
         </span>
         {loading ? (
           <Loading />
@@ -460,50 +477,26 @@ const SkillItemView = ({
  */
 const SkillItem = memo(SkillItemView);
 
-/** One thing the list places at its own offset: a source's caption, or one of its skills. */
-type Item =
-  | { kind: "caption"; key: string; group: CardGroup; first: boolean }
-  | {
-      kind: "card";
-      key: string;
-      group: CardGroup;
-      card: SkillCard;
-      at: number;
-    };
+/** One skill the list places at its own offset, `at` its place in its group. */
+interface Item {
+  key: string;
+  group: CardGroup;
+  card: SkillCard;
+  at: number;
+}
 
-/** The captions, when shown, and the cards in the order the list shows them. */
-const itemsOf = (groups: CardGroup[], captions: boolean): Item[] =>
-  groups.flatMap((group, i) => [
-    ...(captions
-      ? [
-          {
-            first: i === 0,
-            group,
-            key: `caption:${group.source}`,
-            kind: "caption" as const,
-          },
-        ]
-      : []),
-    ...group.cards.map((card, at): Item => ({
-      at,
-      card,
-      group,
-      key: card.key,
-      kind: "card",
-    })),
-  ]);
+/** The cards in the order the list shows them. */
+const itemsOf = (groups: CardGroup[]): Item[] =>
+  groups.flatMap((group) =>
+    group.cards.map((card, at): Item => ({ at, card, group, key: card.key }))
+  );
 
 /**
  * The height the list assumes for an item it has not drawn yet, in px, close to what the tokens
- * give: a caption, and a closed row with `add-card.spacing` above it unless it opens its group.
+ * give: a closed row with `add-card.spacing` above it unless it opens its group.
  * Each item takes its measured height once it is drawn, an open one included.
  */
-const estimatedHeight = (item: Item | undefined) => {
-  if (item?.kind === "caption") {
-    return item.first ? 28 : 56;
-  }
-  return item?.at === 0 ? 46 : 52;
-};
+const estimatedHeight = (item: Item | undefined) => (item?.at === 0 ? 46 : 52);
 
 /**
  * The height a drawn item takes in the list: the height the browser lays it out at, up to the
@@ -518,8 +511,6 @@ const measuredHeight = (element: Element, entry?: ResizeObserverEntry) =>
 const OVERSCAN = 8;
 
 /** A drawn item: the list sets its offset from the top. */
-const PLACED_CAPTION_FIRST = "absolute top-0 left-0 w-full pb-3";
-const PLACED_CAPTION = "absolute top-0 left-0 w-full pt-7 pb-3";
 const PLACED_CARD_FIRST = "absolute top-0 left-0 w-full";
 /** A card after the first of its group, `add-card.spacing` below the one before it. */
 const PLACED_CARD = "pt-add-card absolute top-0 left-0 w-full";
@@ -551,21 +542,32 @@ const useOffsetIn = (
       setOffset((previous) => (previous === next ? previous : next));
     };
     const sizes = new ResizeObserver(measure);
-    // Only what comes before the list moves where it starts.
-    const observeSiblings = () => {
+    // Only what comes before the list, in the scroller, moves where it starts.
+    const ancestors: Element[] = [];
+    for (
+      let node = element?.parentElement ?? null;
+      node !== null && parent?.contains(node) === true;
+      node = node.parentElement
+    ) {
+      ancestors.push(node);
+    }
+    const observeBefore = () => {
       sizes.disconnect();
-      for (const child of parent?.children ?? []) {
-        if (child === element) {
-          break;
+      for (const node of [element, ...ancestors]) {
+        for (
+          let before = node?.previousElementSibling ?? null;
+          before !== null;
+          before = before.previousElementSibling
+        ) {
+          sizes.observe(before);
         }
-        sizes.observe(child);
       }
       measure();
     };
-    observeSiblings();
-    const children = new MutationObserver(observeSiblings);
-    if (parent !== null) {
-      children.observe(parent, { childList: true });
+    observeBefore();
+    const children = new MutationObserver(observeBefore);
+    for (const node of ancestors) {
+      children.observe(node, { childList: true });
     }
     return () => {
       sizes.disconnect();
@@ -576,21 +578,18 @@ const useOffsetIn = (
 };
 
 /**
- * The skills to add as one list, a card per skill, one section per source. With `captions`, each
- * section opens with the source's mono caption, as a search answer does. A row opens and closes on
+ * The skills to add as one list, a card per skill, one section per source. A row opens and closes on
  * a click anywhere but its check, several at once; only the check selects. The list scrolls in
  * `scroller`, the screen's own scroll container, and only the rows near the part that shows are in
  * the document, so a source of thousands of skills stays quick.
  */
 export const SkillList = ({
   groups,
-  captions,
   selected,
   onToggle,
   scroller,
 }: {
   groups: CardGroup[];
-  captions: boolean;
   /** The keys of the selected cards. */
   selected: ReadonlySet<string>;
   onToggle: (card: SkillCard) => void;
@@ -602,12 +601,8 @@ export const SkillList = ({
   const skillMds = useAppStore((s) => s.skillMds);
   const list = useRef<HTMLDivElement>(null);
   const offset = useOffsetIn(list, scroller);
-  const items = itemsOf(groups, captions);
-  const cards = new Map(
-    items.flatMap((item) =>
-      item.kind === "card" ? [[item.key, item.card] as const] : []
-    )
-  );
+  const items = itemsOf(groups);
+  const cards = new Map(items.map((item) => [item.key, item.card] as const));
   const ready = (key: string) => {
     const card = cards.get(key);
     return card === undefined || isReady(card, skillMds[key]);
@@ -679,36 +674,23 @@ export const SkillList = ({
       sections.push(last);
     }
     last.nodes.push(
-      item.kind === "caption" ? (
-        <div
-          key={item.key}
-          ref={virtualizer.measureElement}
-          data-index={index}
-          className={item.first ? PLACED_CAPTION_FIRST : PLACED_CAPTION}
-        >
-          <h2 className="type-caption text-group-label m-0">
-            {item.group.label}
-          </h2>
-        </div>
-      ) : (
-        <div
-          key={item.key}
-          ref={virtualizer.measureElement}
-          data-index={index}
-          className={item.at === 0 ? PLACED_CARD_FIRST : PLACED_CARD}
-        >
-          <SkillItem
-            card={item.card}
-            open={open.includes(item.card.key)}
-            loading={
-              wanted.includes(item.card.key) && !open.includes(item.card.key)
-            }
-            selected={selected.has(item.card.key)}
-            onToggle={toggle}
-            onRemove={remove}
-          />
-        </div>
-      )
+      <div
+        key={item.key}
+        ref={virtualizer.measureElement}
+        data-index={index}
+        className={item.at === 0 ? PLACED_CARD_FIRST : PLACED_CARD}
+      >
+        <SkillItem
+          card={item.card}
+          open={open.includes(item.card.key)}
+          loading={
+            wanted.includes(item.card.key) && !open.includes(item.card.key)
+          }
+          selected={selected.has(item.card.key)}
+          onToggle={toggle}
+          onRemove={remove}
+        />
+      </div>
     );
   }
 
