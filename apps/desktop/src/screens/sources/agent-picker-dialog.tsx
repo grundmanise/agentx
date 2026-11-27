@@ -70,15 +70,21 @@ const Name = ({
   </span>
 );
 
-/** A configuration that takes a placement, with the checkbox; the whole row toggles it. */
-const Row = ({
+/**
+ * A configuration that takes a placement, with the checkbox; the whole row toggles it. The agent
+ * picker and the Add skill dialog's agent step list them.
+ */
+export const AgentRow = ({
   configuration,
   checked,
   onToggle,
+  disabled = false,
 }: {
   configuration: Configuration;
   checked: boolean;
   onToggle: () => void;
+  /** The install runs: the choice is fixed. */
+  disabled?: boolean;
 }) => {
   const id = useId();
   return (
@@ -94,6 +100,7 @@ const Row = ({
           track="agent-picker-dialog.row-select"
           aria-label={configuration.name}
           checked={checked}
+          disabled={disabled}
           onCheckedChange={onToggle}
         />
       </label>
@@ -204,7 +211,7 @@ export const AgentPickerDialog = ({
               universalIds.has(c.id) ? (
                 <UniversalRow key={c.id} configuration={c} />
               ) : (
-                <Row
+                <AgentRow
                   key={c.id}
                   configuration={c}
                   checked={targets.includes(c.id)}
