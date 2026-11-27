@@ -454,9 +454,10 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 	return targets, nil
 }
 
-// sharedSources are the entries of sources the update check and serve's
-// search index cover: every one but the hub, which holds no
-// skill on one branch to check or list. Its forks are fetched whole by the
+// sharedSources are the entries of sources the update check covers, and
+// serve's search index as shared sources: every one but the hub, which
+// holds no skill on one branch to check or list; the index lists its
+// forks by their branches instead. Its forks are fetched whole by the
 // commands that read them, see fetchForks; fetching it as a shared source
 // would bring its objects in without their blobs, which its forks' history
 // then lacks.
