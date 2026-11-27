@@ -1577,7 +1577,7 @@ test("Refresh all fetches every source in one run, then reads your skills, pendi
   );
 });
 
-test("Remove with its installed skills removes each skill, then the source", async ({
+test("Remove with its installed skills removes them and the source in one command", async ({
   cli,
   page,
 }) => {
@@ -1598,10 +1598,7 @@ test("Remove with its installed skills removes each skill, then the source", asy
   });
   await expect(also).not.toBeChecked();
   await also.click();
-  cli.register(["skill", "remove", "pdf"], {
-    events: [{ name: "pdf", type: "library_skill" }],
-  });
-  cli.register(["source", "remove", ACME], {
+  cli.register(["source", "remove", ACME, "--skills"], {
     events: [{ id: ACME_ID, type: "source", url: ACME }],
   });
   await confirm.getByRole("button", { name: "Remove" }).click();
@@ -1629,53 +1626,8 @@ test("Remove with its installed skills removes each skill, then the source", asy
   await expect(bar(page)).toHaveCount(0);
   expect(commandLines(cli)).toEqual([
     `source skills ${ACME_ID}`,
-    "skill remove pdf",
-    `source remove ${ACME}`,
+    `source remove ${ACME} --skills`,
     `source skills ${ZETA_ID}`,
-  ]);
-});
-
-test("Retry after the lock resumes the removal: the skill, then the source", async ({
-  cli,
-  page,
-}) => {
-  await openSources(cli, page);
-  await details(page).getByRole("button", { name: "Remove" }).click();
-  const confirm = page.getByRole("alertdialog", {
-    name: "Remove acme/skills?",
-  });
-  await confirm
-    .getByRole("checkbox", { name: "Also remove its 1 installed skill pdf" })
-    .click();
-  cli.register(["skill", "remove", "pdf"], {
-    events: [
-      {
-        code: "locked",
-        message: "another agentx command holds the lock",
-        type: "error",
-      },
-    ],
-    exitCode: 7,
-  });
-  await confirm.getByRole("button", { name: "Remove" }).click();
-  await expect(
-    toasts(page).getByText("Another agentx command is running")
-  ).toBeVisible();
-  cli.register(["skill", "remove", "pdf"], {
-    events: [{ name: "pdf", type: "library_skill" }],
-  });
-  cli.register(["source", "remove", ACME], {
-    events: [{ id: ACME_ID, type: "source", url: ACME }],
-  });
-  await page.getByRole("button", { name: "Retry" }).click();
-  await expect(
-    toasts(page).getByText("Source and 1 skill removed")
-  ).toBeVisible();
-  expect(commandLines(cli)).toEqual([
-    `source skills ${ACME_ID}`,
-    "skill remove pdf",
-    "skill remove pdf",
-    `source remove ${ACME}`,
   ]);
 });
 

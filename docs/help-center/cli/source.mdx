@@ -265,6 +265,14 @@ hint: run 'agentx source add https://github.com/anthropics/skills' to add it aga
 
 Once you remove the last of those skills with [`agentx skill remove <name>`](/cli/skill), agentx no longer knows the source's URL. Add the source again by its URL.
 
+To remove the skills you installed from a source together with it, add `--skills`:
+
+```sh
+agentx source remove anthropics/skills --skills
+```
+
+Each skill leaves this machine as [`agentx skill remove`](/cli/skill) removes it, then the source. Your hub skills stay. If a skill cannot be removed, the command stops there: the skills before it are gone, and the source stays.
+
 Removing your [hub](#add-your-hub) clears it from this machine's settings. Your hub skills stay on this machine, and nothing on the remote changes:
 
 ```text

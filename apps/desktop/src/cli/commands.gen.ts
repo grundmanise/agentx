@@ -110,7 +110,9 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   },
   "source list": {},
   "source read": {},
-  "source remove": {},
+  "source remove": {
+    skills: false,
+  },
   "source skills": {},
   update: {
     check: false,

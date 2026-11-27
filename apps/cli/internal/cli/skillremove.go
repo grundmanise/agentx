@@ -155,102 +155,110 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 		return storeFailure(err)
 	}
 	plan := removalPlan{name: name, whole: whole, from: targetIDs(targets)}
-	libPath := inv.libraryPath(name)
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		// Every input is read again under the lock, and the refs before
-		// anything is staged, so that a fork is refused before the command
-		// has planned a single deletion.
-		lib, ok := librarySkill(inv.dirs.Library, name)
-		if !ok {
-			return inv.noLibrarySkill(name)
-		}
-		judge := copyJudge{against: "the library"}
-		if libHash := lib.ContentHash; libHash != "" {
-			judge.differs = func(path string) bool { return contentHashAt(path) != libHash }
-		}
-		refs := map[string]string{}
-		if hasRepo {
-			values, err := inv.lineageRefs(ctx, gitDir, name)
-			if err != nil {
-				return err
-			}
-			if whole && values[lineage.ForkRef(name)] != "" {
-				// A fork made since it was judged: removing it is the
-				// removal of a fork, which this run did not plan.
-				return fail(exitRefused, sanitised(name)+" became a hub skill while it was being removed, so nothing was removed",
-					"run '"+skillCommand("remove", name)+"' again")
-			}
-			// A merge an update left pending holds the library directory
-			// and the import branch the removal would take away; taking
-			// one placement away leaves both, and is not refused.
-			if whole && inv.mergePending(name) {
-				return pendingMergeRefusal(name, "removed")
-			}
-			refs = values
-		}
-		edit, err := inv.beginSettings()
-		if err != nil {
-			return err
-		}
-		m := home.NewMutation(inv.dirs.Home)
-		plan.deleted, plan.kept, plan.library, plan.dropped = nil, nil, nil, nil
-		// What the run deletes is known before its first step, so that the
-		// warning for a link it leaves can say whether that link still leads
-		// anywhere, whichever target the link leads through.
-		gone := removalDeletes(targets, name, libPath, edit.copiesOf(name), whole)
-		var traced map[string]adoptPlace
-		if whole {
-			traced = inv.tracedCopies(name, libPath)
-			for path := range traced {
-				gone[path] = true
-			}
-		}
-		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, edit.copiesOf(name), gone, traced); err != nil {
-			m.Discard()
-			return err
-		}
-		if whole {
-			state, err := home.State(libPath)
-			if err != nil {
-				m.Discard()
-				return err
-			}
-			m.Remove(libPath, state)
-			// Both carry the value they hold now, so a branch something
-			// else moved is refused rather than dropped. The journal
-			// deletes refs last, after the library directory and every
-			// placement, so a removal that cannot finish still has the
-			// skill's lineage to answer with.
-			if commit := refs[lineage.ManagedRef(name)]; commit != "" {
-				plan.managed = commit
-				m.Ref(gitDir, lineage.ManagedRef(name), commit, "")
-			}
-			dropCheckRefs(m, gitDir, name, refs)
-			edit.dropSkill(name)
-		} else {
-			edit.dropCopies(name, plan.dropped)
-		}
-		if err := edit.stage(m, inv.dirs.Home); err != nil {
-			m.Discard()
-			return err
-		}
-		// What the skill was is read from its import commit before the
-		// journal deletes the branch; an unmanaged skill names no source
-		// and leaves no date.
-		var left []home.Install
-		if plan.managed != "" {
-			left = append(left, inv.importedInstall(ctx, gitDir, name, plan.managed))
-		}
-		if err := m.Apply(inv.refs(ctx)); err != nil {
-			return err
-		}
-		inv.recordInstalls(nil, left)
-		return nil
+		return inv.removeLocked(ctx, &plan, targets, gitDir, hasRepo)
 	})
 	if err != nil {
 		return mutationFailure(err)
 	}
 	return inv.reportRemoved(ctx, plan, targets)
+}
+
+// removeLocked is the removal plan describes, of a skill the library holds,
+// under the lock its caller took: what it deleted and what it left go into
+// plan.
+func (inv *invocation) removeLocked(ctx context.Context, plan *removalPlan, targets []placeTarget, gitDir string, hasRepo bool) error {
+	name, whole := plan.name, plan.whole
+	libPath := inv.libraryPath(name)
+	// Every input is read again under the lock, and the refs before
+	// anything is staged, so that a fork is refused before the command
+	// has planned a single deletion.
+	lib, ok := librarySkill(inv.dirs.Library, name)
+	if !ok {
+		return inv.noLibrarySkill(name)
+	}
+	judge := copyJudge{against: "the library"}
+	if libHash := lib.ContentHash; libHash != "" {
+		judge.differs = func(path string) bool { return contentHashAt(path) != libHash }
+	}
+	refs := map[string]string{}
+	if hasRepo {
+		values, err := inv.lineageRefs(ctx, gitDir, name)
+		if err != nil {
+			return err
+		}
+		if whole && values[lineage.ForkRef(name)] != "" {
+			// A fork made since it was judged: removing it is the
+			// removal of a fork, which this run did not plan.
+			return fail(exitRefused, sanitised(name)+" became a hub skill while it was being removed, so nothing was removed",
+				"run '"+skillCommand("remove", name)+"' again")
+		}
+		// A merge an update left pending holds the library directory
+		// and the import branch the removal would take away; taking
+		// one placement away leaves both, and is not refused.
+		if whole && inv.mergePending(name) {
+			return pendingMergeRefusal(name, "removed")
+		}
+		refs = values
+	}
+	edit, err := inv.beginSettings()
+	if err != nil {
+		return err
+	}
+	m := home.NewMutation(inv.dirs.Home)
+	plan.deleted, plan.kept, plan.library, plan.dropped = nil, nil, nil, nil
+	// What the run deletes is known before its first step, so that the
+	// warning for a link it leaves can say whether that link still leads
+	// anywhere, whichever target the link leads through.
+	gone := removalDeletes(targets, name, libPath, edit.copiesOf(name), whole)
+	var traced map[string]adoptPlace
+	if whole {
+		traced = inv.tracedCopies(name, libPath)
+		for path := range traced {
+			gone[path] = true
+		}
+	}
+	if err := inv.stageRemovals(m, plan, targets, libPath, judge, edit.copiesOf(name), gone, traced); err != nil {
+		m.Discard()
+		return err
+	}
+	if whole {
+		state, err := home.State(libPath)
+		if err != nil {
+			m.Discard()
+			return err
+		}
+		m.Remove(libPath, state)
+		// Both carry the value they hold now, so a branch something
+		// else moved is refused rather than dropped. The journal
+		// deletes refs last, after the library directory and every
+		// placement, so a removal that cannot finish still has the
+		// skill's lineage to answer with.
+		if commit := refs[lineage.ManagedRef(name)]; commit != "" {
+			plan.managed = commit
+			m.Ref(gitDir, lineage.ManagedRef(name), commit, "")
+		}
+		dropCheckRefs(m, gitDir, name, refs)
+		edit.dropSkill(name)
+	} else {
+		edit.dropCopies(name, plan.dropped)
+	}
+	if err := edit.stage(m, inv.dirs.Home); err != nil {
+		m.Discard()
+		return err
+	}
+	// What the skill was is read from its import commit before the
+	// journal deletes the branch; an unmanaged skill names no source
+	// and leaves no date.
+	var left []home.Install
+	if plan.managed != "" {
+		left = append(left, inv.importedInstall(ctx, gitDir, name, plan.managed))
+	}
+	if err := m.Apply(inv.refs(ctx)); err != nil {
+		return err
+	}
+	inv.recordInstalls(nil, left)
+	return nil
 }
 
 // stageRemovals plans, into m, what the removal does at the placement of
@@ -957,6 +965,16 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 	if err != nil {
 		return err
 	}
+	if err := inv.reportRemovedIn(ctx, inventory, plan, targets); err != nil {
+		return err
+	}
+	inv.summary = removeSummary(plan)
+	return nil
+}
+
+// reportRemovedIn is reportRemoved against a rescan its caller ran, which
+// one rescan after the removal of several skills is.
+func (inv *invocation) reportRemovedIn(ctx context.Context, inventory scan.Inventory, plan removalPlan, targets []placeTarget) error {
 	lib, stillThere := librarySkill(inv.dirs.Library, plan.name)
 	// A fork's removal that left a directory of the user's at the library
 	// path reports it as what the library holds now, as a removal of
@@ -977,7 +995,6 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 	if !plan.quiet {
 		inv.printRemoved(plan)
 	}
-	inv.summary = removeSummary(plan)
 	return nil
 }
 
