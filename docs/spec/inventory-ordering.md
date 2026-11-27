@@ -12,7 +12,9 @@ At launch, before any serve child runs, the desktop may display the kept invento
 
 ## Refresh after a command
 
-After a one-shot command terminates, including a partial failure or cancellation that might have changed state, the desktop sends a `refresh` request to its active serve child. Command outcome and inventory freshness are separate states in the UI.
+After a one-shot command terminates, including a partial failure or cancellation that might have changed state, the desktop sends a `refresh` request to its active serve child. The command is over for the desktop when serve answers that request: its control stays pending until then, and its toast, the dialog it closes and the row it selects show with the inventory of that scan, in one frame.
+
+Serve writes a scan's inventory, then the answers to the requests the scan satisfies. The desktop therefore holds an inventory that arrives while a request waits for its answer, and applies it with the next answer, in one store update. With no request waiting it applies an inventory at once. A serve child that ended holds nothing back: the held inventory is applied, and when no child comes back the commands that wait are over, since nothing answers them.
 
 A client of serve's WebSocket door runs its commands through serve with `run`, and follows the same rule: serve does not scan for a command it ran, so the client sends the `refresh` method after one that might have changed state.
 

@@ -22,7 +22,7 @@ import {
 } from "./fixtures/adopt-all.ts";
 import { fileReads, filesOf, history } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
-import type { InlineEvent, MockCli } from "./harness/cli.ts";
+import type { MockCli } from "./harness/cli.ts";
 
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
 const unmanaged = (page: Page) =>
@@ -102,18 +102,10 @@ const openSettings = async (
   await expect(settingsSection(page)).toBeVisible();
 };
 
-/** The inventory that follows a run that adopted `managed`, and the answer to its refresh. */
+/** The inventory that follows a run that adopted `managed`. */
 const afterRun = async (cli: MockCli, managed: string[]) => {
   await expect.poll(() => cli.requestIds.length).toBeGreaterThan(0);
   await cli.serveEmit([inventoryWith(managed)]);
-  await cli.serveEmit([
-    {
-      ok: true,
-      request_id: cli.requestIds.at(-1) ?? "",
-      scan_counter: managed.length + 1,
-      type: "refresh_complete",
-    } satisfies InlineEvent,
-  ]);
 };
 
 test.describe("Import skills in the Hub card of Settings", () => {

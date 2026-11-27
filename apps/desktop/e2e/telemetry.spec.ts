@@ -290,7 +290,6 @@ test.describe("the question", () => {
     on.release();
     await expect.poll(() => refreshes(cli)).toBe(first + 1);
     // The switch shows the setting as the inventory lists it until the next inventory.
-    await expect(usageSwitch(page)).toHaveAttribute("aria-busy", "true");
     await expect(usageSwitch(page)).not.toBeChecked();
     await scanned(cli, inventoryOf("on", { scanCounter: 2 }));
     await expect(usageSwitch(page)).toBeChecked();

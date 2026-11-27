@@ -142,6 +142,7 @@ test("Create in the Skills header runs skill new with the description and select
   cli,
   page,
 }) => {
+  cli.answersRefreshes = false;
   await openDialog(cli, page);
   await expect(
     dialog(page).getByText("Add a new skill to your agents.")
@@ -159,16 +160,18 @@ test("Create in the Skills header runs skill new with the description and select
   await create.started;
   await expect(createButton(page)).toHaveAttribute("aria-busy", "true");
   create.release();
-  await expect(
-    toasts(page).getByText(`Created ${NEW_SKILL} skill`)
-  ).toBeVisible();
 
   // The command ended; the inventory that follows has not come: the dialog stays busy.
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
   await expect(dialog(page)).toBeVisible();
   await expect(createButton(page)).toHaveAttribute("aria-busy", "true");
+  await expect(toasts(page).getByRole("listitem")).toHaveCount(0);
 
   await answerRefresh(cli);
   await expect(dialog(page)).toBeHidden();
+  await expect(
+    toasts(page).getByText(`Created ${NEW_SKILL} skill`)
+  ).toBeVisible();
   await expect(
     hubGroup(page).getByRole("button", { exact: true, name: NEW_SKILL })
   ).toHaveAttribute("aria-current", "true");
@@ -247,6 +250,7 @@ test("Add skill finds the skills under a link, and installs the two picked in th
   cli,
   page,
 }) => {
+  cli.answersRefreshes = false;
   await openAddDialog(cli, page);
   await expect(linkField(page)).toHaveAccessibleDescription(
     "A GitHub or GitLab link to a repository, a folder or a skill"
@@ -313,13 +317,10 @@ test("Add skill finds the skills under a link, and installs the two picked in th
   await add.started;
   await expect(installButton(page)).toHaveAttribute("aria-busy", "true");
   add.release();
+  await answerRefresh(cli, inventoryAfterAdd);
   await expect(
     toasts(page).getByText("Installed 2 skills from anthropics/skills")
   ).toBeVisible();
-
-  // The command ended; the inventory that follows has not come: the dialog stays busy.
-  await expect(installButton(page)).toHaveAttribute("aria-busy", "true");
-  await answerRefresh(cli, inventoryAfterAdd);
   await expect(addDialog(page)).toBeHidden();
   await expect(row(page, "docx")).toHaveAttribute("aria-current", "true");
   await expect(pane(page, "docx")).toBeVisible();

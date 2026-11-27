@@ -43,9 +43,8 @@ import {
   publishFailure,
   refusedForHub,
 } from "#/screens/skills/publish.ts";
-import { agentx, stopOnClose } from "#/store/runner.ts";
+import { agentx, stopOnClose, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 /** The label of the publish of `name`, for its pending state. */
@@ -58,7 +57,7 @@ const updateLabel = (name: string) => `update ${name}`;
 
 /** Update: `skill update <name>`, which takes in what changed somewhere else. */
 const update = (name: string) => {
-  void runUntilSettled(["skill", "update", name], {
+  void agentx(["skill", "update", name], {
     label: updateLabel(name),
     success: `Updated ${name} skill`,
   });
@@ -259,7 +258,7 @@ const PublishForm = ({
   const [typed, setTyped] = useState<string | undefined>();
   const message = typed ?? summary;
   const [progress, setProgress] = useState<ProgressEvent | undefined>();
-  const pending = useSettling(publishLabel(name));
+  const pending = usePending(publishLabel(name));
   const [running, setRunning] = useState(false);
 
   const publish = async () => {
@@ -268,7 +267,7 @@ const PublishForm = ({
     }
     setRunning(true);
     setProgress(undefined);
-    const outcome = await runUntilSettled(publishArgs(name, message, summary), {
+    const outcome = await agentx(publishArgs(name, message, summary), {
       failure: (ended) => publishFailure(ended, row.entry?.source),
       keep: [name],
       label: publishLabel(name),
@@ -394,7 +393,7 @@ export const PublishButton = ({
   const [files, setFiles] = useState<FilesState>({ kind: "reading" });
   // The read of the latest opening: an earlier one that ends later does not replace it.
   const opening = useRef(0);
-  const pending = useSettling(publishLabel(row.name));
+  const pending = usePending(publishLabel(row.name));
   // A hub skill cannot be published while the hub is read-only; a source's skill shows
   // Publish only while its source is writable.
   const readOnly = useAppStore((s) =>

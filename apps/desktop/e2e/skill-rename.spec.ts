@@ -107,17 +107,6 @@ test("Rename with a name another skill has: the dialog stays open with the CLI's
   await expect(alert).toHaveText(
     "The store already holds release-notes as a hub skill. Choose another name."
   );
-  // The field takes edits again once the inventory that follows the refusal has arrived.
-  await expect(field).toBeDisabled();
-  await cli.serveEmit([
-    {
-      ok: true,
-      request_id: cli.requestIds.at(-1) ?? "",
-      scan_counter: 2,
-      type: "refresh_complete",
-    },
-  ]);
-  await expect(field).toBeEnabled();
   await field.fill("changelog");
   await expect(alert).toHaveCount(0);
   expect(renames(cli)).toEqual([

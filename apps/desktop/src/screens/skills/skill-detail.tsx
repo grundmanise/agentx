@@ -36,7 +36,7 @@ import { canRename } from "#/screens/skills/rename.ts";
 import { SightsNotice } from "#/screens/skills/sights-view.tsx";
 import { sightsOf } from "#/screens/skills/sights.ts";
 import { loadUpdateDiff } from "#/store/loaders.ts";
-import { useSettling } from "#/store/settle.ts";
+import { usePending } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 
 const Caption = ({ children }: { children: string }) => (
@@ -102,7 +102,7 @@ const RemoveButton = ({
   row: SkillRow;
   onClick: () => void;
 }) => {
-  const pending = useSettling(removeLabel(row));
+  const pending = usePending(removeLabel(row));
   return (
     <Button
       track="skill-detail.remove"

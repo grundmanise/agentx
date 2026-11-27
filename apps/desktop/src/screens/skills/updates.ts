@@ -20,9 +20,8 @@ import type { ToastAction } from "#/components/toast.tsx";
 import { checkingText } from "#/screens/skills/checking-text.tsx";
 import { offerOf, shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow, UpdateOffer } from "#/screens/skills/projection.ts";
-import { cancelCommand, usePending } from "#/store/runner.ts";
+import { agentx, cancelCommand, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { afterSettled, runUntilSettled } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
@@ -55,7 +54,7 @@ export const useCheckingUpdates = () => usePending(CHECK_UPDATES);
 export const addSource = (source: string): ToastAction => ({
   label: "Add source",
   onClick: () => {
-    void runUntilSettled(["source", "add", source], {
+    void agentx(["source", "add", source], {
       label: `add source ${source}`,
       success: `Added ${shortSource(source)} source`,
     });
@@ -84,7 +83,7 @@ const updatedText = (row: SkillRow, events: CliEvent[]) => {
  */
 export const updateSkill = async (row: SkillRow) => {
   const source = row.entry?.source;
-  const outcome = await runUntilSettled(["skill", "update", row.name], {
+  const outcome = await agentx(["skill", "update", row.name], {
     // Exit 5: the CLI's message, with the way out in place of the command its hint names.
     failure: ({ exitCode, events }) => {
       const error = events.find((e) => e.type === "error");
@@ -120,7 +119,7 @@ export const settleMerge = async (
   row: SkillRow,
   how: "--continue" | "--theirs"
 ) => {
-  const outcome = await runUntilSettled(["skill", "update", row.name, how], {
+  const outcome = await agentx(["skill", "update", row.name, how], {
     label: updateLabel(row.name),
     success: (events) => updatedText(row, events),
   });
@@ -250,25 +249,22 @@ export const checkUpdates = async () => {
     track: "check-updates-toast.cancel",
   };
   notify(checkingText(), cancel, { kind: "progress", lasting: true });
-  const { events, exitCode } = await runUntilSettled(
-    ["skill", "check-updates"],
-    {
-      failure: unreachableFailure,
-      label: CHECK_UPDATES,
-      onProgress: (event) => {
-        if (event.phase === "fetch") {
-          notify(checkingText(event.current, event.total), cancel, {
-            inPlace: true,
-            kind: "progress",
-            lasting: true,
-          });
-        }
-      },
-      // An update found: the dialog says so, in place of a toast.
-      success: (found) =>
-        offered(found) === 0 ? "All skills are up to date" : undefined,
-    }
-  );
+  const { events, exitCode } = await agentx(["skill", "check-updates"], {
+    failure: unreachableFailure,
+    label: CHECK_UPDATES,
+    onProgress: (event) => {
+      if (event.phase === "fetch") {
+        notify(checkingText(event.current, event.total), cancel, {
+          inPlace: true,
+          kind: "progress",
+          lasting: true,
+        });
+      }
+    },
+    // An update found: the dialog says so, in place of a toast.
+    success: (found) =>
+      offered(found) === 0 ? "All skills are up to date" : undefined,
+  });
   if (exitCode !== EXIT_CODES.ok && exitCode !== EXIT_CODES.source) {
     return;
   }
@@ -281,11 +277,9 @@ export const checkUpdates = async () => {
   if (exitCode === EXIT_CODES.ok) {
     dismissToast();
   }
-  afterSettled(() => {
-    if (offersUpdates()) {
-      openUpdateDialog();
-    }
-  });
+  if (offersUpdates()) {
+    openUpdateDialog();
+  }
 };
 
 /**
@@ -511,7 +505,7 @@ export const updateSkills = async (rows: UpdateRunRow[]) => {
   });
   const events: CliEvent[] = [];
   const logs: LogEvent[] = [];
-  const outcome = await runUntilSettled(["skill", "update", ...names], {
+  const outcome = await agentx(["skill", "update", ...names], {
     keep: names,
     label,
     onEvent: (event) => {

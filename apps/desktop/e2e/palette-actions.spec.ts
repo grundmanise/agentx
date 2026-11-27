@@ -153,14 +153,11 @@ test.describe("Rescan this machine", () => {
     const before = refreshes(cli).length;
     await option(page, "Rescan this machine").click();
     await expect.poll(() => refreshes(cli).length).toBe(before + 1);
-    const id = cli.requestIds.at(-1) ?? "";
-    await cli.serveEmit([
-      { ok: true, request_id: id, scan_counter: 1, type: "refresh_complete" },
-    ]);
     await expect(toasts(page)).toContainText("Rescanned");
   });
 
   test("a scan that failed shows its error", async ({ cli, page }) => {
+    cli.answersRefreshes = false;
     launch(cli);
     await openPalette(page);
     await option(page, "Rescan this machine").click();

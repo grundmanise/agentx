@@ -6,7 +6,7 @@ import { useId } from "react";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import { SettingsRow } from "#/screens/settings/section.tsx";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /** The pending label of `config set ignore_system_files`. */
@@ -14,7 +14,7 @@ export const IGNORE_LABEL = "set ignore_system_files";
 
 const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
   const id = useId();
-  const pending = useSettling(IGNORE_LABEL);
+  const pending = usePending(IGNORE_LABEL);
   return (
     <SettingsRow
       name="Ignore system files"
@@ -42,7 +42,7 @@ const IgnoreSystemFiles = ({ checked }: { checked: boolean }) => {
             disabled={pending}
             aria-busy={pending ? true : undefined}
             onCheckedChange={(on) => {
-              void runUntilSettled(
+              void agentx(
                 ["config", "set", "ignore_system_files", String(on)],
                 {
                   label: IGNORE_LABEL,

@@ -38,7 +38,7 @@ import {
   updateSkill,
 } from "#/screens/skills/updates.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /** The label of the Adopt control for `row`: the runner's name for it. */
@@ -134,7 +134,7 @@ export const adopt = async (row: SkillRow, force = false) => {
   if (args === undefined) {
     return;
   }
-  const outcome = await runUntilSettled(force ? [...args, "--force"] : args, {
+  const outcome = await agentx(force ? [...args, "--force"] : args, {
     failure: (failed) => adoptRefusal(row, failed),
     label: adoptLabel(row),
     success: (events) => `Imported ${adoptedName(events) ?? row.name} skill`,
@@ -176,14 +176,14 @@ const ActionButton = ({
 /** Add to agents: `skill place <name>`, into every enabled agent. */
 export const AddToAgents = ({ row }: { row: SkillRow }) => {
   const label = `place ${row.key}`;
-  const pending = useSettling(label);
+  const pending = usePending(label);
   return (
     <ActionButton
       track="skill-banner.add-to-agents"
       label="Add to agents"
       pending={pending}
       onClick={() => {
-        void runUntilSettled(["skill", "place", row.name], {
+        void agentx(["skill", "place", row.name], {
           label,
           success: (events) =>
             `Added ${row.name} skill to ${agentsWord(placedCount(events))}`,
@@ -195,7 +195,7 @@ export const AddToAgents = ({ row }: { row: SkillRow }) => {
 
 /** Adopt, for an unmanaged skill `skill import` can take over. */
 export const Adopt = ({ row }: { row: SkillRow }) => {
-  const pending = useSettling(adoptLabel(row));
+  const pending = usePending(adoptLabel(row));
   return (
     <ActionButton
       track="skill-banner.import"
@@ -222,11 +222,11 @@ export const Reconnect = ({
   agent: string;
 }) => {
   const label = reconnectLabel(row, placement);
-  const pending = useSettling(label);
+  const pending = usePending(label);
   const [confirm, setConfirm] = useState(false);
   const putBack = async (force: boolean) => {
     const args = ["skill", "place", row.name, "--to", placement.configuration];
-    const outcome = await runUntilSettled(force ? [...args, "--force"] : args, {
+    const outcome = await agentx(force ? [...args, "--force"] : args, {
       label,
       success: `Reconnected ${row.name} skill to ${agent}`,
     });
@@ -346,14 +346,14 @@ export const AdoptReplaceConfirm = () => {
 
 /** Add source: `source add <url>`, which ends the skill's "source removed" state. */
 export const AddSource = ({ source }: { source: string }) => {
-  const pending = useSettling(addSourceLabel(source));
+  const pending = usePending(addSourceLabel(source));
   return (
     <ActionButton
       track="skill-banner.add-source"
       label="Add source"
       pending={pending}
       onClick={() => {
-        void runUntilSettled(["source", "add", source], {
+        void agentx(["source", "add", source], {
           label: addSourceLabel(source),
           success: `Added ${shortSource(source)} source`,
         });
@@ -378,7 +378,7 @@ export const OpenSkill = ({ name }: { name: string }) => (
 
 /** Update: `skill update <name>`, the primary action of an update's banner. */
 export const UpdateButton = ({ row }: { row: SkillRow }) => {
-  const pending = useSettling(updateLabel(row.name));
+  const pending = usePending(updateLabel(row.name));
   return (
     <Button
       track="skill-banner.update"
@@ -475,7 +475,7 @@ export const ShowMergeFolder = ({ name }: { name: string }) => {
  * is refused, and the runner's toast names it and its line.
  */
 export const ApplyMerge = ({ row }: { row: SkillRow }) => {
-  const pending = useSettling(updateLabel(row.name));
+  const pending = usePending(updateLabel(row.name));
   return (
     <Button
       track="skill-banner.apply-merge"
@@ -498,7 +498,7 @@ export const ApplyMerge = ({ row }: { row: SkillRow }) => {
  * as published, after a confirm dialog, since the edits are lost.
  */
 export const DiscardEdits = ({ row }: { row: SkillRow }) => {
-  const pending = useSettling(updateLabel(row.name));
+  const pending = usePending(updateLabel(row.name));
   const [confirm, setConfirm] = useState(false);
   return (
     <>

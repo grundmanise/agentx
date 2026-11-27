@@ -12,9 +12,8 @@ import type { AdoptionEvent, CliEvent } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";
 import { toolName } from "#/screens/skills/projection.ts";
-import { cancelCommand } from "#/store/runner.ts";
+import { agentx, cancelCommand } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { runUntilSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
 
 /** The value of `skill import --from` that names a tool. */
@@ -280,25 +279,20 @@ const adoptTool = async (tool: ToolArg, rows: AdoptRow[]) => {
       .filter((r) => r.tool === tool && r.status === "waiting")
       .map((r) => r.name)
   );
-  const outcome = await runUntilSettled(
-    ["skill", "import", "--from", tool, "--all"],
-    {
-      label: adoptAllLabel(tool),
-      onProgress: (progress) => {
-        const { phase, subject } = progress;
-        update((run) => ({
-          ...run,
-          rows: run.rows.map((row) =>
-            row.tool === tool && row.name === subject
-              ? stepped(row, phase)
-              : row
-          ),
-          started: run.started + (phase === "blobs" ? 1 : 0),
-        }));
-      },
-      ownFailure: true,
-    }
-  );
+  const outcome = await agentx(["skill", "import", "--from", tool, "--all"], {
+    label: adoptAllLabel(tool),
+    onProgress: (progress) => {
+      const { phase, subject } = progress;
+      update((run) => ({
+        ...run,
+        rows: run.rows.map((row) =>
+          row.tool === tool && row.name === subject ? stepped(row, phase) : row
+        ),
+        started: run.started + (phase === "blobs" ? 1 : 0),
+      }));
+    },
+    ownFailure: true,
+  });
   const adoption = adoptionsOf(outcome.events);
   if (adoption.length > 0) {
     update((run) => ({

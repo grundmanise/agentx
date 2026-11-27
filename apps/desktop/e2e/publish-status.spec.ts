@@ -39,18 +39,6 @@ const LONG_REMOTE =
 /** Every skill to publish on the fixture machine, as Publish all names them. */
 const OUTGOING = ["changelog", "draft", "notes"];
 
-/** Answers every refresh request so far, as serve does after its scan. */
-const answerRefreshes = async (cli: MockCli) => {
-  await cli.serveEmit(
-    cli.requestIds.map((id) => ({
-      ok: true,
-      request_id: id,
-      scan_counter: 1,
-      type: "refresh_complete",
-    }))
-  );
-};
-
 /** Whether the mocked CLI ran `args` (without --json). */
 const ran = (cli: MockCli, args: string[]) =>
   cli.commands.some((l) => l.join(" ") === [...args, "--json"].join(" "));
@@ -333,9 +321,6 @@ test.describe("publish", () => {
       "There is a newer version of notes skill on the hub. Update it first, then publish your changes."
     );
     expect(ran(cli, ["skill", "publish", ...OUTGOING])).toBe(true);
-    // Until the inventory that follows arrives, the pill keeps the last count.
-    await expect(status(page)).toHaveText("Publishing 3 of 3");
-    await answerRefreshes(cli);
     await expect(status(page)).toHaveText("3 to publish");
 
     await toast.getByRole("button", { name: "Update" }).click();

@@ -40,7 +40,7 @@ import { removedText, removeFailure } from "#/screens/agents/remove.ts";
 import { Confirm } from "#/screens/settings/confirm.tsx";
 import { convertedText } from "#/screens/skills/placements.ts";
 import { UNIVERSAL } from "#/screens/skills/projection.ts";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 
 /**
@@ -108,7 +108,7 @@ const placementTitle = (c: Configuration) =>
  * keeps a copy edited in place, and the toast says how many it kept.
  */
 const convert = (c: Configuration, mode: Placement) => {
-  void runUntilSettled(["config", "placement", c.id, mode, "--convert"], {
+  void agentx(["config", "placement", c.id, mode, "--convert"], {
     label: placementLabel(c),
     success: (events) => convertedText(events, c.name, mode),
   });
@@ -129,12 +129,12 @@ const PlacementControl = ({
   disabled: boolean;
 }) => {
   const id = useId();
-  const pending = useSettling(placementLabel(c));
+  const pending = usePending(placementLabel(c));
   const value: Placement = c.placement === "copy" ? "copy" : "symlink";
   const onChange = (mode: Placement) => {
     // The skills already there as the other kind, which the toast offers to convert.
     const n = placedAsCount(inventory, c.id, value);
-    void runUntilSettled(["config", "placement", c.id, mode], {
+    void agentx(["config", "placement", c.id, mode], {
       action:
         n > 0
           ? {
@@ -183,7 +183,7 @@ const PlacementControl = ({
 const removeLabel = (c: Configuration) => `remove ${c.id}`;
 
 const remove = (c: Configuration) => {
-  void runUntilSettled(["config", "remove", c.id, "--yes"], {
+  void agentx(["config", "remove", c.id, "--yes"], {
     failure: removeFailure,
     label: removeLabel(c),
     success: removedText,
@@ -196,7 +196,7 @@ const remove = (c: Configuration) => {
  */
 const AgentMenu = ({ c }: { c: Configuration }) => {
   const [confirming, setConfirming] = useState(false);
-  const pending = useSettling(removeLabel(c));
+  const pending = usePending(removeLabel(c));
   return (
     <>
       <DropdownMenu>
@@ -272,15 +272,15 @@ const AgentCard = ({
   inventory: InventoryEvent;
 }) => {
   const counts = countsOf(inventory, c);
-  const pending = useSettling(switchLabel(c));
+  const pending = usePending(switchLabel(c));
   const onToggle = (checked: boolean) => {
     if (checked) {
-      void runUntilSettled(["config", "enable", c.id], {
+      void agentx(["config", "enable", c.id], {
         label: switchLabel(c),
         success: `${c.name} enabled`,
       });
     } else {
-      void runUntilSettled(["config", "disable", c.id], {
+      void agentx(["config", "disable", c.id], {
         label: switchLabel(c),
         success: `${c.name} disabled. New skills won't go there by default.`,
       });

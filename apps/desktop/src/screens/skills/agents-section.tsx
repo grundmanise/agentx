@@ -31,7 +31,7 @@ import {
 import type { Lock } from "#/screens/skills/placements.ts";
 import { UNIVERSAL } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
+import { agentx, usePending } from "#/store/runner.ts";
 
 /**
  * Whether a `skill remove --from <id>` left the skill where `id` still sees it: a directory or a
@@ -80,7 +80,7 @@ const toggle = (row: SkillRow, c: Configuration, add: boolean) => {
     },
     track: "skill-agents.undo",
   };
-  void runUntilSettled(
+  void agentx(
     add
       ? ["skill", "place", row.name, "--to", c.id]
       : ["skill", "remove", row.name, "--from", c.id],
@@ -125,7 +125,7 @@ const notifyLocked = (row: SkillRow, lock: Lock) => {
 const DirectChip = ({ row, c }: { row: SkillRow; c: Configuration }) => {
   const state = chipStateOf(row, c);
   const locked = lockOf(row);
-  const pending = useSettling(chipLabel(row, c));
+  const pending = usePending(chipLabel(row, c));
   return (
     <AgentChip
       track="skill-agents.toggle-agent"

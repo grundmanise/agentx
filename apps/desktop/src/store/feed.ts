@@ -28,7 +28,7 @@ import {
   serveLogLine,
 } from "#/store/activity-log.ts";
 import { useAppStore } from "#/store/store.ts";
-import type { Problem } from "#/store/store.ts";
+import type { AppState, Problem } from "#/store/store.ts";
 
 /** The serve child whose events count; 0 before the first one starts. */
 let active = 0;
@@ -49,21 +49,27 @@ const send = async (requestId: string) => {
   }
 };
 
-/** Asks the serve child to scan again, as after every command that may have changed something. */
-export const refresh = async () => {
-  await send(crypto.randomUUID());
-};
+/** Who waits for the answer to a refresh request, by request id. */
+const waiters = new Map<string, (event?: RefreshCompleteEvent) => void>();
 
-/** Who waits for the answer to a refresh request, by request id: Rescan this machine. */
-const rescans = new Map<string, (event: RefreshCompleteEvent) => void>();
+/** Whether the last serve child ended and none comes back: no request is answered until Retry. */
+let gone = false;
+
+/** Answers every waiter with undefined: serve ended for good, and answers none of them. */
+const release = () => {
+  for (const put of waiters.values()) {
+    put();
+  }
+  waiters.clear();
+};
 
 /** Sends again, with a new id, a request an earlier child did not answer; its waiter waits on. */
 const resend = async (requestId: string) => {
   const next = crypto.randomUUID();
-  const waiter = rescans.get(requestId);
+  const waiter = waiters.get(requestId);
   if (waiter !== undefined) {
-    rescans.delete(requestId);
-    rescans.set(next, waiter);
+    waiters.delete(requestId);
+    waiters.set(next, waiter);
   }
   await send(next);
 };
@@ -96,15 +102,20 @@ const slot = <T>() => {
 };
 
 /**
- * Rescan this machine: one refresh request, which resolves with its `refresh_complete`, ok or
- * with the error the scan failed with. A request the serve child does not answer goes to the next
- * child, as every refresh does.
+ * Asks the serve child to scan again, as after every command that may have changed something and
+ * for Rescan this machine. It resolves with the request's `refresh_complete`, ok or with the error
+ * the scan failed with, once the store holds the inventory of that scan: what follows a command
+ * shows with the inventory, in the same frame. A request the serve child does not answer goes to
+ * the next child; when serve ended and none comes back, it resolves with undefined.
  */
-export const rescan = async (): Promise<RefreshCompleteEvent | undefined> => {
+export const refresh = async (): Promise<RefreshCompleteEvent | undefined> => {
   const requestId = crypto.randomUUID();
   const answer = slot<RefreshCompleteEvent>();
-  rescans.set(requestId, answer.put);
+  waiters.set(requestId, answer.put);
   await send(requestId);
+  if (gone) {
+    release();
+  }
   return await answer.take();
 };
 
@@ -160,6 +171,7 @@ const activate = (childId: number) => {
     return;
   }
   active = childId;
+  gone = false;
   logBackground("background scan started");
   // A search the child before did not answer is never answered: the new child's index is asked anew.
   dropSearch();
@@ -193,8 +205,18 @@ export const retryRefresh = async () => {
   await refresh();
 };
 
-/** Applies an inventory, unless the same instance already applied one with a counter as high. */
-const applyInventory = (childId: number, event: InventoryEvent) => {
+/**
+ * The inventory that arrived while a refresh request waited for its answer. Serve writes a scan's
+ * inventory, then the answers to the requests the scan satisfies: the store takes both at once,
+ * with the answer, so that the list and what waits for the answer change in the same frame.
+ */
+let held: { childId: number; event: InventoryEvent } | undefined;
+
+/** The store with an inventory in it; nothing when the same instance already applied a counter as high. */
+const withInventory = (
+  childId: number,
+  event: InventoryEvent
+): Partial<AppState> => {
   const { applied } = useAppStore.getState();
   if (
     applied !== undefined &&
@@ -202,9 +224,9 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
     applied.instanceId === event.instance_id &&
     event.scan_counter <= applied.counter
   ) {
-    return;
+    return {};
   }
-  set({
+  return {
     applied: {
       childId,
       counter: event.scan_counter,
@@ -212,27 +234,50 @@ const applyInventory = (childId: number, event: InventoryEvent) => {
     },
     freshness: { kind: "fresh" },
     inventory: event,
-  });
+  };
 };
 
-/** Clears an answered request, even when the inventory did not change. */
+/** The store with the held inventory in it, which is then held no longer. */
+const withHeld = (): Partial<AppState> => {
+  const waiting = held;
+  held = undefined;
+  return waiting === undefined
+    ? {}
+    : withInventory(waiting.childId, waiting.event);
+};
+
+/** Applies an inventory, or holds it for the answer to a refresh request that waits for one. */
+const applyInventory = (childId: number, event: InventoryEvent) => {
+  if (Object.keys(useAppStore.getState().refreshes).length > 0) {
+    held = { childId, event };
+    return;
+  }
+  set(withInventory(childId, event));
+};
+
+/**
+ * Clears an answered request, even when the inventory did not change, applies the inventory held
+ * for it, then tells who waits for the answer.
+ */
 const acknowledge = (event: RefreshCompleteEvent) => {
-  rescans.get(event.request_id)?.(event);
-  rescans.delete(event.request_id);
   if (!event.ok) {
     logBackground(event.error ?? eventLine(event), { failed: true });
   }
-  const { refreshes } = useAppStore.getState();
-  if (!Object.hasOwn(refreshes, event.request_id)) {
-    return;
-  }
-  const { [event.request_id]: _, ...rest } = refreshes;
+  const { [event.request_id]: asked, ...rest } =
+    useAppStore.getState().refreshes;
   set({
-    freshness: event.ok
-      ? { kind: "fresh" }
-      : { error: event.error ?? "the scan failed", kind: "failed" },
-    refreshes: rest,
+    ...withHeld(),
+    ...(asked === undefined
+      ? {}
+      : {
+          freshness: event.ok
+            ? { kind: "fresh" }
+            : { error: event.error ?? "the scan failed", kind: "failed" },
+          refreshes: rest,
+        }),
   });
+  waiters.get(event.request_id)?.(event);
+  waiters.delete(event.request_id);
 };
 
 const apply = (childId: number, event: ServeEvent) => {
@@ -289,6 +334,7 @@ const onLine = (line: ServeLine) => {
 
 const onExit = (exit: ServeExit) => {
   ended = Math.max(ended, exit.childId);
+  set(withHeld());
   const code = exit.exitCode === null ? "a signal" : `code ${exit.exitCode}`;
   const problem = errors.get(exit.childId) ?? {
     message: lastStderr(exit.stderr) ?? `agentx serve stopped with ${code}`,
@@ -325,6 +371,10 @@ const onExit = (exit: ServeExit) => {
         ? { kind: "stale" }
         : { error: problem.message, kind: "failed" },
     });
+    if (!exit.restarting) {
+      gone = true;
+      release();
+    }
   }
 };
 

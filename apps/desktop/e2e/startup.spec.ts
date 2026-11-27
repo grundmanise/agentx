@@ -363,6 +363,7 @@ test("serve refused fails check 5 with serve's message and hint", async ({
     type: "error",
   } as const;
   // Serve keeps running and answering, and says why it does not watch.
+  cli.answersRefreshes = false;
   cli.onServeStart({ events: [refused] });
   await page.goto("/");
   await expect(title(page)).toHaveText("agentx can't watch this machine");
@@ -394,6 +395,7 @@ test("a problem serve reports again on Retry shows at once", async ({
     message: "cannot scan /home/me/.agents/skills: git failed",
     type: "error",
   } as const;
+  cli.answersRefreshes = false;
   cli.onServeStart({ events: [failed] });
   await page.goto("/");
   await expect(row(page, "Watching this machine")).toContainText(

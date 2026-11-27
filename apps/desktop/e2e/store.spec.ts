@@ -17,6 +17,11 @@ const value = (page: Page, term: string) =>
 const staleBar = (page: Page) =>
   page.getByRole("status").and(page.locator(":not(.sr-only)"));
 
+// Each test answers the refresh requests itself, to say when and with what.
+test.beforeEach(({ cli }) => {
+  cli.answersRefreshes = false;
+});
+
 /** Launches the app, waits for the store's reads, and shows the store. */
 const launch = async (cli: MockCli, page: Page) => {
   await page.goto("/");
@@ -30,10 +35,10 @@ const launch = async (cli: MockCli, page: Page) => {
 /** Sends one refresh request, as after a command, and gives its id. */
 const refresh = async (cli: MockCli, page: Page) => {
   const before = cli.serveRequests.length;
-  await page.evaluate(async () => {
-    await window.store.refresh();
+  await page.evaluate(() => {
+    window.store.refresh();
   });
-  expect(cli.serveRequests).toHaveLength(before + 1);
+  await expect.poll(() => cli.serveRequests).toHaveLength(before + 1);
   return cli.requestIds.at(-1) ?? "";
 };
 
@@ -126,10 +131,11 @@ test("ignores an old child's events after a restart", async ({ cli, page }) => {
     ],
     1
   );
-  // The old child's events are handled before serveEmit returns: none changed the store.
+  // The old child's events are handled before serveEmit returns: none changed the store. The
+  // new child's first inventory waits for the answer to the request it got.
   const after = await page.evaluate(() => window.store.state());
-  expect(after.applied).toMatchObject({ counter: 1, instanceId: "instance-2" });
-  expect(after.freshness).toEqual({ kind: "fresh" });
+  expect(after.applied).toMatchObject({ counter: 1, instanceId: "instance-1" });
+  expect(after.freshness).toEqual({ kind: "stale" });
   expect(Object.keys(after.refreshes)).toEqual([sentToNew]);
 
   await cli.serveEmit([
@@ -216,6 +222,7 @@ test("ignores the inventory a one-shot writes, and keeps its outcome", async ({
   page,
 }) => {
   await launch(cli, page);
+  cli.answersRefreshes = true;
   cli.register(["scan"], {
     events: [{ ...firstInventory(["codex"]), scan_counter: 7 }],
   });
@@ -232,7 +239,7 @@ test("ignores the inventory a one-shot writes, and keeps its outcome", async ({
   await expect(value(page, "Agents")).toHaveText("2");
 });
 
-test("a refresh stays pending through a scan that began before it", async ({
+test("an inventory that arrives while a refresh waits is applied with the answer", async ({
   cli,
   page,
 }) => {
@@ -240,19 +247,75 @@ test("a refresh stays pending through a scan that began before it", async ({
   const id = await refresh(cli, page);
   await expect(value(page, "Pending refreshes")).toHaveText("1");
 
-  // The scan that was running when the request came: its inventory does not answer it.
   await cli.serveEmit([{ ...firstInventory(["codex"]), scan_counter: 2 }]);
-  await expect(value(page, "Counter")).toHaveText("2");
-  expect(
-    Object.keys(await page.evaluate(() => window.store.state().refreshes))
-  ).toEqual([id]);
+  // The inventory is handled before serveEmit returns: the store did not take it.
+  const held = await page.evaluate(() => window.store.state());
+  expect(held.applied).toMatchObject({ counter: 1 });
+  expect(Object.keys(held.refreshes)).toEqual([id]);
 
   await cli.serveEmit([
-    { ...firstInventory(), scan_counter: 3 },
-    { ok: true, request_id: id, scan_counter: 3, type: "refresh_complete" },
+    { ok: true, request_id: id, scan_counter: 2, type: "refresh_complete" },
   ]);
   await expect(value(page, "Pending refreshes")).toHaveText("0");
-  await expect(value(page, "Counter")).toHaveText("3");
+  await expect(value(page, "Counter")).toHaveText("2");
+  await expect(value(page, "Agents")).toHaveText("1");
+});
+
+test("what a command ends with shows in the frame of the inventory that follows it", async ({
+  cli,
+  page,
+}) => {
+  await launch(cli, page);
+  cli.register(["skill", "remove", "pdf"], {});
+
+  await page.evaluate(() => {
+    window.store.run(["skill", "remove", "pdf"], {
+      label: "remove pdf",
+      success: "Removed pdf",
+    });
+  });
+  await expect.poll(() => cli.serveRequests).toHaveLength(1);
+  const [id] = cli.requestIds;
+  await cli.serveEmit([{ ...firstInventory(["codex"]), scan_counter: 2 }]);
+
+  await cli.serveEmit([
+    { ok: true, request_id: id, scan_counter: 2, type: "refresh_complete" },
+  ]);
+  await expect(
+    page
+      .getByRole("region", { name: /^Notifications/u })
+      .getByText("Removed pdf", { exact: true })
+  ).toBeVisible();
+  const frames = await page.evaluate(() => window.store.frames());
+  // Sonner adds a toast on a timer, so the toast may come one frame after the inventory.
+  expect(
+    frames.slice(frames.indexOf("1|remove pdf|")).filter((f) => f !== "2||")
+  ).toEqual(["1|remove pdf|", "2||Removed pdf"]);
+});
+
+test("a command is over when serve ended and does not come back", async ({
+  cli,
+  page,
+}) => {
+  await launch(cli, page);
+  cli.register(["skill", "remove", "pdf"], {});
+
+  await page.evaluate(() => {
+    window.store.run(["skill", "remove", "pdf"], {
+      label: "remove pdf",
+      success: "Removed pdf",
+    });
+  });
+  await expect.poll(() => cli.serveRequests).toHaveLength(1);
+  await expect(value(page, "Running")).toHaveText("remove pdf");
+
+  await cli.serveExit(1, [], null);
+  await expect(value(page, "Running")).toHaveText("");
+  await expect(
+    page
+      .getByRole("region", { name: /^Notifications/u })
+      .getByText("Removed pdf", { exact: true })
+  ).toBeVisible();
 });
 
 test("accepts an acknowledgement for an unchanged inventory", async ({

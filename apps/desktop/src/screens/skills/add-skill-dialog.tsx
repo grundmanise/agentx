@@ -52,7 +52,6 @@ import { SelectAllRow } from "#/screens/sources/select-all-row.tsx";
 import { SkillRows } from "#/screens/sources/skill-rows.tsx";
 import { agentx, stopOnClose, usePending } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
-import { afterSettled } from "#/store/settle.ts";
 import type { Problem } from "#/store/store.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -139,11 +138,7 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
   const [found, setFound] = useState<Found | undefined>();
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const finding = usePending(FIND_SKILLS_LABEL);
-  // Install is pending while `skill add` runs and, once it installed the skills, until the inventory
-  // that follows lists them. A refusal changed nothing, so it waits for no inventory.
-  const running = usePending(ADD_SKILL_LABEL);
-  const [selecting, setSelecting] = useState(false);
-  const adding = running || selecting;
+  const adding = usePending(ADD_SKILL_LABEL);
   const hintId = useId();
 
   const cards =
@@ -235,15 +230,11 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
       }
       return;
     }
-    // The skill is selected from the inventory that follows, never from the command's result.
     const [first] = installedNames(outcome.events);
-    setSelecting(true);
-    afterSettled(() => {
-      onClose();
-      if (first !== undefined) {
-        openSkill(first);
-      }
-    });
+    onClose();
+    if (first !== undefined) {
+      openSkill(first);
+    }
   };
 
   const toggle = (card: SkillCard) => {

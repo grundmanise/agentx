@@ -84,19 +84,6 @@ const openSkill = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-/** Answers the last refresh request, as serve does after the scan that follows a command. */
-const answerRefresh = async (cli: MockCli) => {
-  const requestId = cli.requestIds.at(-1) ?? "";
-  await cli.serveEmit([
-    {
-      ok: true,
-      request_id: requestId,
-      scan_counter: 1,
-      type: "refresh_complete",
-    },
-  ]);
-};
-
 test.describe("chips", () => {
   test("a direct agent, off: adds the placement, pending until the refresh, with Undo", async ({
     cli,
@@ -124,9 +111,6 @@ test.describe("chips", () => {
       toasts(page).getByText("Added pdf skill to Cursor")
     ).toBeVisible();
     await expect.poll(() => cli.serveRequests.length).toBe(1);
-    // The command ended; the inventory that follows has not come: still pending.
-    await expect(cursor).toHaveAttribute("aria-busy", "true");
-    await answerRefresh(cli);
     await expect(cursor).not.toHaveAttribute("aria-busy");
     expect(later(cli)).toEqual([
       ["skill", "place", "pdf", "--to", "cursor", "--json"],
@@ -641,11 +625,7 @@ test.describe("banners", () => {
     expect(later(cli)).toEqual([
       ["skill", "place", "release-notes", "--to", "cursor", "--json"],
     ]);
-    // A refused command may still have changed something: the refresh that follows it is
-    // answered before the button is ready again.
     const reconnect = banner.getByRole("button", { name: "Reconnect" });
-    await expect(reconnect).toBeDisabled();
-    await answerRefresh(cli);
     await expect(reconnect).toBeEnabled();
 
     cli.register(
