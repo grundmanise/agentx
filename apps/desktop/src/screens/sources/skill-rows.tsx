@@ -10,9 +10,9 @@ import { statusVariants } from "#/screens/sources/skill-list.tsx";
 
 /**
  * One skill as a row of the Add skill dialog's list: the round checkbox before the name, the
- * description under the name. A skill this machine holds already has an empty slot in place of
- * the checkbox, so the names keep one column, and its status in the card's colour at the right.
- * A selectable row is the whole hit target.
+ * description under the name. A skill that cannot be installed, such as one this machine holds
+ * already, has a disabled checkbox, and its status in the card's colour at the right. A selectable
+ * row is the whole hit target.
  */
 const SkillRow = ({
   card,
@@ -48,7 +48,14 @@ const SkillRow = ({
   if (card.status !== undefined) {
     return (
       <li title={card.title} className="flex items-center gap-3 px-3 py-2">
-        {text(<span aria-hidden className="size-checkbox flex-none" />)}
+        {text(
+          <Checkbox
+            track="add-skill-dialog.row-select"
+            aria-label={card.name}
+            checked={false}
+            disabled
+          />
+        )}
         <span className={statusVariants({ status: card.status })}>
           {statusLabels[card.status]}
         </span>

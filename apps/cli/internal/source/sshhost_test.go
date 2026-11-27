@@ -3,7 +3,11 @@ package source
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/testshim"
@@ -57,5 +61,30 @@ func TestSSHHosts(t *testing.T) {
 	}
 	if got := SSHHosts(context.Background(), map[string]string{"PATH": t.TempDir()})("github-work"); got != "github-work" {
 		t.Errorf("without ssh, resolve(github-work) = %q", got)
+	}
+}
+
+// TestSSHHostsReadsAnSSHThatLeftAProcessRunning: an ssh that exits while a
+// process it started still holds its output, as a Match exec command can,
+// resolves to the host name it printed.
+func TestSSHHostsReadsAnSSHThatLeftAProcessRunning(t *testing.T) {
+	t.Parallel()
+	bin := t.TempDir()
+	left := filepath.Join(t.TempDir(), "left")
+	t.Cleanup(func() {
+		if b, err := os.ReadFile(left); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	sleeper, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testshim.Write(t, filepath.Join(bin, "ssh"), "#!/bin/sh\necho 'hostname github.com'\n"+
+		sleeper+" 60 &\necho $! > "+left+"\n")
+	if got := SSHHosts(context.Background(), map[string]string{"PATH": bin})("github-work"); got != "github.com" {
+		t.Errorf("resolve(github-work) = %q, want %q", got, "github.com")
 	}
 }

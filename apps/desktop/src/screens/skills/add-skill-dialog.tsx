@@ -1,19 +1,25 @@
-// The Add skill dialog, which Add in the Skills header and the palette open: a Git link to a
-// repository, a folder of skills or one skill. Find skills runs `source skills <link>`, a read that
-// lists the skills under the link, from the network for a source not added and from the last fetch
-// of one added, and changes nothing; the user checks the ones to install and the agents to install
-// them in, and Install runs one `skill add <link> --name <a> --name <b> [--to <configuration>]...`
+// The Add skill dialog, which Add in the Skills header and the palette open, in two steps. First a
+// Git link to a repository, a folder of skills or one skill: Find skills runs `source skills
+// <link>`, a read that lists the skills under the link, from the network for a source not added
+// and from the last fetch of one added, and changes nothing; the user checks the ones to install,
+// searching them by name and description. Next shows the agents to install them in, and Install
+// runs one `skill add <link> --name <a> --name <b> [--to <configuration>]...`
 // (docs/help-center/cli/skill.mdx), which adds the source and installs them. Cancel after a lookup
 // runs nothing. The first skill installed is selected once the inventory that follows lists it; a
-// refusal of either step shows under the field.
+// refusal shows under the field, or under the agents for Install.
 import { useId, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
   CliEvent,
+  Configuration,
   LibraryEntry,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
+import { LogoStack } from "#/components/agent-logo.tsx";
+import { LockMark } from "#/components/check-mark.tsx";
+import { SearchIcon } from "#/components/icons/search.tsx";
 import { ProblemText } from "#/components/problem-text.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -25,6 +31,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { Spinner } from "#/components/ui/spinner.tsx";
 import { doctorRule } from "#/lib/app-hint.ts";
@@ -35,10 +46,8 @@ import {
   addSourceHintRules,
   linkProblem,
 } from "#/screens/sources/add-source.ts";
-import {
-  AgentTargets,
-  useAgentTargets,
-} from "#/screens/sources/agent-targets.tsx";
+import { AgentRow } from "#/screens/sources/agent-picker-dialog.tsx";
+import { useAgentTargets } from "#/screens/sources/agent-targets.tsx";
 import {
   count,
   linkAdd,
@@ -98,37 +107,271 @@ const installedText = (events: CliEvent[], url: string) => {
   return `Installed ${what} from ${shortSource(url)}`;
 };
 
-/** What the list says when nothing under the link can be installed, or undefined when some can. */
+/**
+ * What the list says when nothing under the link can be installed, or undefined when some can or
+ * every one is installed already, which the rows say.
+ */
 const nothingToInstall = (cards: SkillCard[]): string | undefined => {
   if (cards.length === 0) {
     return "No skills under this link";
   }
-  if (cards.every((c) => c.status === "added")) {
-    return "Every skill under this link is already installed";
-  }
-  return cards.some((c) => c.status === undefined)
+  return cards.some((c) => c.status === undefined) ||
+    cards.every((c) => c.status === "added")
     ? undefined
     : "None of the skills under this link can be installed";
 };
+
+/** Whether the search, in lower case, finds the skill by its name or description. */
+const matches = (card: SkillCard, text: string) =>
+  card.name.toLowerCase().includes(text) ||
+  card.description.toLowerCase().includes(text);
+
+/** A search field over a list, with the search icon at its left. */
+const SearchField = ({
+  label,
+  placeholder,
+  value,
+  onChange,
+  autoFocus = false,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoFocus?: boolean;
+}) => (
+  <InputGroup>
+    <InputGroupAddon>
+      <SearchIcon size="xs" />
+    </InputGroupAddon>
+    <InputGroupInput
+      autoFocus={autoFocus}
+      kind="list-search"
+      type="search"
+      aria-label={label}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => {
+        onChange(e.target.value);
+      }}
+    />
+  </InputGroup>
+);
+
+/**
+ * The universal agents, pinned under the agent list: they read the library, so every skill
+ * reaches them. Three logos and "+n", the lock where a row has its checkbox. No control.
+ */
+const UniversalAgents = ({ universal }: { universal: Configuration[] }) => (
+  <div className="border-shell-divider flex items-center gap-3 border-t px-3 pt-3">
+    <LogoStack
+      clients={universal.slice(0, 3)}
+      hidden={universal.slice(3)}
+      size={28}
+    />
+    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="type-body text-text-primary">Universal agents</span>
+      <span className="type-secondary text-text-muted">Always included</span>
+    </span>
+    <LockMark />
+    <span className="sr-only">Always on</span>
+  </div>
+);
 
 /** Whether the refusal is the field's to show: not a lock, whose toast has Retry, nor a cancel. */
 const showsUnderField = (outcome: Outcome) =>
   outcome.exitCode !== EXIT_CODES.locked && !outcome.cancelled;
 
 /**
- * The field, Find skills, the skills found and the agents, and the buttons. Mounted while the
- * dialog is open.
+ * The skills found: the select-all row and the search when several can be picked, then the rows.
+ * The search acts on the rows it shows: Select all checks the matches, and a check it hides stays.
+ */
+const FoundSkills = ({
+  cards,
+  selection,
+  onSelectionChange,
+}: {
+  cards: SkillCard[];
+  /** The keys of the selected cards. */
+  selection: ReadonlySet<string>;
+  onSelectionChange: (selection: ReadonlySet<string>) => void;
+}) => {
+  const [query, setQuery] = useState("");
+  const text = query.trim().toLowerCase();
+  const shown = cards.filter((c) => matches(c, text));
+  const shownSelectable = shown.filter((c) => c.status === undefined);
+  const nothing = nothingToInstall(cards);
+  const pickable = cards.filter((c) => c.status === undefined).length;
+  const toggle = (card: SkillCard) => {
+    const next = new Set(selection);
+    if (next.has(card.key)) {
+      next.delete(card.key);
+    } else {
+      // The library holds one skill of a name: selecting one deselects the other.
+      for (const other of cards) {
+        if (sameName(other, card)) {
+          next.delete(other.key);
+        }
+      }
+      next.add(card.key);
+    }
+    onSelectionChange(next);
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      {pickable > 0 && cards.length > 1 && (
+        // Inset as the rows are, so its checkbox heads their column.
+        <div className="flex items-center justify-between gap-3 px-3">
+          <SelectAllRow
+            track="add-skill-dialog.select-all"
+            selected={
+              shownSelectable.filter((c) => selection.has(c.key)).length
+            }
+            total={oneOfEachName(shownSelectable).length}
+            onSelectAll={() => {
+              const taken = cards.filter((c) => selection.has(c.key));
+              onSelectionChange(
+                new Set([
+                  ...selection,
+                  ...oneOfEachName(shownSelectable, taken).map((c) => c.key),
+                ])
+              );
+            }}
+            onClear={() => {
+              const next = new Set(selection);
+              for (const c of shownSelectable) {
+                next.delete(c.key);
+              }
+              onSelectionChange(next);
+            }}
+          />
+          <div className="w-add-skill-search">
+            <SearchField
+              label="Search skills"
+              placeholder="Search skills"
+              value={query}
+              onChange={setQuery}
+            />
+          </div>
+        </div>
+      )}
+      {nothing !== undefined && (
+        <p className="type-secondary text-text-hint m-0">{nothing}</p>
+      )}
+      {cards.length > 0 && shown.length === 0 && (
+        <p className="type-secondary text-text-muted m-0 py-2 text-center">
+          No skills match
+        </p>
+      )}
+      {shown.length > 0 && (
+        // A new search starts the list at its top.
+        <SkillRows
+          key={text}
+          cards={shown}
+          selected={selection}
+          onToggle={(card) => {
+            toggle(card);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+/**
+ * The second step: a search over the agents that take a placement, its select-all row and their
+ * rows by name, then the universal agents pinned under them, then a refusal of Install.
+ */
+const AgentsStep = ({
+  direct,
+  universal,
+  chosen,
+  onChoose,
+  disabled,
+  children,
+}: {
+  /** The configurations that take a placement. */
+  direct: Configuration[];
+  /** The configurations whose client reads the library. */
+  universal: Configuration[];
+  /** The ids of the chosen targets. */
+  chosen: string[];
+  onChoose: (ids: string[]) => void;
+  /** The install runs: the choice is fixed. */
+  disabled: boolean;
+  children: ReactNode;
+}) => {
+  const [query, setQuery] = useState("");
+  const text = query.trim().toLowerCase();
+  const shown = direct.filter((c) => c.name.toLowerCase().includes(text));
+  shown.sort((a, b) => a.name.localeCompare(b.name));
+  const shownIds = shown.map((c) => c.id);
+  return (
+    <div className="flex flex-col gap-3">
+      <SearchField
+        autoFocus
+        label="Search agents"
+        placeholder={`Search ${direct.length} agents`}
+        value={query}
+        onChange={setQuery}
+      />
+      {shown.length > 0 && (
+        <div className="px-3">
+          <SelectAllRow
+            track="add-skill-dialog.select-all-agents"
+            selected={shownIds.filter((id) => chosen.includes(id)).length}
+            total={shown.length}
+            onSelectAll={() => {
+              onChoose([...new Set([...chosen, ...shownIds])]);
+            }}
+            onClear={() => {
+              onChoose(chosen.filter((id) => !shownIds.includes(id)));
+            }}
+          />
+        </div>
+      )}
+      <div className="flex flex-col">
+        {shown.length === 0 ? (
+          <p className="type-secondary text-text-muted m-0 py-2 text-center">
+            No agents match
+          </p>
+        ) : (
+          <ul
+            aria-label="Agents"
+            className="max-h-add-skill-list m-0 flex list-none flex-col overflow-auto p-0"
+          >
+            {shown.map((c) => (
+              <AgentRow
+                key={c.id}
+                configuration={c}
+                checked={chosen.includes(c.id)}
+                disabled={disabled}
+                onToggle={() => {
+                  onChoose(
+                    chosen.includes(c.id)
+                      ? chosen.filter((id) => id !== c.id)
+                      : [...chosen, c.id]
+                  );
+                }}
+              />
+            ))}
+          </ul>
+        )}
+        {universal.length > 0 && <UniversalAgents universal={universal} />}
+      </div>
+      {children}
+    </div>
+  );
+};
+
+/**
+ * The dialog's two steps: the field, Find skills and the skills found, then the agents. Mounted
+ * while the dialog is open.
  */
 const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
   const library = useAppStore((s) => s.inventory?.library) ?? noEntries;
-  const {
-    chosen,
-    clear: clearTargets,
-    direct,
-    enabled,
-    toggle: toggleTarget,
-    universal,
-  } = useAgentTargets();
+  const { chosen, choose, direct, enabled, universal } = useAgentTargets();
+  const [step, setStep] = useState<"skills" | "agents">("skills");
   const [link, setLink] = useState("");
   // The field as it stands, for a lookup that ends after the link changed.
   const current = useRef("");
@@ -151,9 +394,7 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
       ? []
       : orderCards(listingCards(found.listing, found.url, library));
   const selectable = cards.filter((c) => c.status === undefined);
-  const oneEach = oneOfEachName(selectable);
   const selected = selectable.filter((c) => selection.has(c.key));
-  const nothing = nothingToInstall(cards);
 
   const refuse = (
     outcome: Outcome,
@@ -246,32 +487,12 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
     });
   };
 
-  const toggle = (card: SkillCard) => {
-    setSelection((prev) => {
-      const next = new Set(prev);
-      if (next.has(card.key)) {
-        next.delete(card.key);
-      } else {
-        // The library holds one skill of a name: selecting one deselects the other.
-        for (const other of cards) {
-          if (sameName(other, card)) {
-            next.delete(other.key);
-          }
-        }
-        next.add(card.key);
-      }
-      return next;
-    });
-  };
+  const refusal = problem !== undefined && (
+    <ProblemText problem={problem} keep={refused} />
+  );
 
-  return (
-    <form
-      className="gap-dialog flex flex-col"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void lookUp(link.trim());
-      }}
-    >
+  const skillsStep = (
+    <>
       <div className="gap-input-label flex flex-col">
         <div className="flex items-center gap-2">
           <Input
@@ -291,96 +512,114 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
               setSelection(new Set());
             }}
           />
-          <Button
-            track="add-skill-dialog.find"
-            type="submit"
-            variant="secondary"
-            disabled={link.trim() === "" || adding}
-            aria-busy={finding ? true : undefined}
-          >
-            {finding && <Spinner />}
-            Find skills
-          </Button>
+          {found === undefined && (
+            <Button
+              track="add-skill-dialog.find"
+              type="submit"
+              variant="secondary"
+              disabled={link.trim() === "" || adding}
+              aria-busy={finding ? true : undefined}
+            >
+              {finding && <Spinner />}
+              Find skills
+            </Button>
+          )}
         </div>
         <p id={hintId} className="type-secondary text-text-hint m-0">
           A GitHub or GitLab link to a repository, a folder or a skill
         </p>
-        {problem !== undefined && (
-          <ProblemText problem={problem} keep={refused} />
-        )}
+        {refusal}
       </div>
       {found !== undefined && (
-        <>
-          <div className="flex flex-col gap-3">
-            {nothing === undefined && cards.length > 1 && (
-              // Inset as the rows are, so its checkbox heads their column.
-              <div className="px-3">
-                <SelectAllRow
-                  track="add-skill-dialog.select-all"
-                  selected={selected.length}
-                  total={oneEach.length}
-                  onSelectAll={() => {
-                    setSelection(
-                      new Set(
-                        [
-                          ...selected,
-                          ...oneOfEachName(selectable, selected),
-                        ].map((c) => c.key)
-                      )
-                    );
-                  }}
-                  onClear={() => {
-                    setSelection(new Set());
-                  }}
-                />
-              </div>
-            )}
-            {nothing !== undefined && (
-              <p className="type-secondary text-text-hint m-0">{nothing}</p>
-            )}
-            {cards.length > 0 && (
-              <SkillRows
-                cards={cards}
-                selected={selection}
-                onToggle={(card) => {
-                  toggle(card);
-                }}
-              />
-            )}
-          </div>
-          {nothing === undefined && (
-            <div className="flex items-center gap-3">
-              <AgentTargets
-                skills={selected.length}
-                direct={direct}
-                universal={universal}
-                targets={chosen}
-                onToggleTarget={toggleTarget}
-                onClearTargets={clearTargets}
-                disabled={adding}
-              />
-            </div>
-          )}
-        </>
+        <FoundSkills
+          cards={cards}
+          selection={selection}
+          onSelectionChange={setSelection}
+        />
+      )}
+    </>
+  );
+
+  const one = selected.length === 1;
+  return (
+    <form
+      className="gap-dialog flex flex-col"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (step === "skills" && found === undefined) {
+          void lookUp(link.trim());
+        }
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle>
+          {step === "skills" ? "Add skill" : "Where to install"}
+        </DialogTitle>
+        <DialogDescription>
+          {step === "skills"
+            ? "Find skills and install into your agents."
+            : `Choose the agents that get ${one ? "this skill" : "these skills"}.`}
+        </DialogDescription>
+      </DialogHeader>
+      {step === "skills" ? (
+        skillsStep
+      ) : (
+        <AgentsStep
+          direct={direct}
+          universal={universal}
+          chosen={chosen}
+          onChoose={choose}
+          disabled={adding}
+        >
+          {refusal}
+        </AgentsStep>
       )}
       <DialogFooter>
-        <DialogClose asChild>
-          <Button track="add-skill-dialog.cancel" variant="ghost">
-            Cancel
-          </Button>
-        </DialogClose>
-        <Button
-          track="add-skill-dialog.install"
-          variant="primary"
-          disabled={found === undefined || selected.length === 0 || finding}
-          aria-busy={adding ? true : undefined}
-          onClick={() => {
-            void install();
-          }}
-        >
-          {adding && <Spinner />}
-          Install
-        </Button>
+        {step === "skills" ? (
+          <>
+            <DialogClose asChild>
+              <Button track="add-skill-dialog.cancel" variant="ghost">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              track="add-skill-dialog.next"
+              variant="primary"
+              disabled={selected.length === 0 || finding}
+              onClick={() => {
+                setProblem(undefined);
+                setStep("agents");
+              }}
+            >
+              Next
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              track="add-skill-dialog.back"
+              variant="ghost"
+              disabled={adding}
+              onClick={() => {
+                setProblem(undefined);
+                setStep("skills");
+              }}
+            >
+              Back
+            </Button>
+            <Button
+              track="add-skill-dialog.install"
+              variant="primary"
+              aria-busy={adding ? true : undefined}
+              onClick={() => {
+                void install();
+              }}
+            >
+              {adding && <Spinner />}
+              {`Install ${selected.length}`}
+            </Button>
+          </>
+        )}
       </DialogFooter>
     </form>
   );
@@ -388,7 +627,7 @@ const AddSkillForm = ({ onClose }: { onClose: () => void }) => {
 
 /**
  * The Add skill dialog. The form is mounted while the dialog is open, so it opens clean each time,
- * with the field focused.
+ * on its first step with the field focused.
  */
 export const AddSkillDialog = ({
   open,
@@ -405,12 +644,6 @@ export const AddSkillDialog = ({
     )}
   >
     <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Add skill</DialogTitle>
-        <DialogDescription>
-          Installs the skills you pick in your agents, and adds their source.
-        </DialogDescription>
-      </DialogHeader>
       <AddSkillForm
         onClose={() => {
           onOpenChange(false);
