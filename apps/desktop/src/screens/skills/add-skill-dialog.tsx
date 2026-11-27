@@ -315,25 +315,27 @@ const AgentsStep = ({
         value={query}
         onChange={setQuery}
       />
-      {shown.length === 0 ? (
-        <p className="type-secondary text-text-muted m-0 py-2 text-center">
-          No agents match
-        </p>
-      ) : (
-        <>
-          <div className="px-3">
-            <SelectAllRow
-              track="add-skill-dialog.select-all-agents"
-              selected={shownIds.filter((id) => chosen.includes(id)).length}
-              total={shown.length}
-              onSelectAll={() => {
-                onChoose([...new Set([...chosen, ...shownIds])]);
-              }}
-              onClear={() => {
-                onChoose(chosen.filter((id) => !shownIds.includes(id)));
-              }}
-            />
-          </div>
+      {shown.length > 0 && (
+        <div className="px-3">
+          <SelectAllRow
+            track="add-skill-dialog.select-all-agents"
+            selected={shownIds.filter((id) => chosen.includes(id)).length}
+            total={shown.length}
+            onSelectAll={() => {
+              onChoose([...new Set([...chosen, ...shownIds])]);
+            }}
+            onClear={() => {
+              onChoose(chosen.filter((id) => !shownIds.includes(id)));
+            }}
+          />
+        </div>
+      )}
+      <div className="flex flex-col">
+        {shown.length === 0 ? (
+          <p className="type-secondary text-text-muted m-0 py-2 text-center">
+            No agents match
+          </p>
+        ) : (
           <ul
             aria-label="Agents"
             className="max-h-add-skill-list m-0 flex list-none flex-col overflow-auto p-0"
@@ -354,9 +356,9 @@ const AgentsStep = ({
               />
             ))}
           </ul>
-        </>
-      )}
-      {universal.length > 0 && <UniversalAgents universal={universal} />}
+        )}
+        {universal.length > 0 && <UniversalAgents universal={universal} />}
+      </div>
       {children}
     </div>
   );
