@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { pdfUpdate } from "./fixtures/updates.ts";
 import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
+import { paintedFrames, recordFrames } from "./harness/frames.ts";
 
 const launchLines = [
   ["version", "--json"],
@@ -267,6 +268,11 @@ test("what a command ends with shows in the frame of the inventory that follows 
 }) => {
   await launch(cli, page);
   cli.register(["skill", "remove", "pdf"], {});
+  await recordFrames(page, [
+    '[aria-label="Counter"]',
+    '[aria-label="Running"]',
+    '[aria-label^="Notifications"]',
+  ]);
 
   await page.evaluate(() => {
     window.store.run(["skill", "remove", "pdf"], {
@@ -286,11 +292,13 @@ test("what a command ends with shows in the frame of the inventory that follows 
       .getByRole("region", { name: /^Notifications/u })
       .getByText("Removed pdf", { exact: true })
   ).toBeVisible();
-  const frames = await page.evaluate(() => window.store.frames());
   // Sonner adds a toast on a timer, so the toast may come one frame after the inventory.
-  expect(
-    frames.slice(frames.indexOf("1|remove pdf|")).filter((f) => f !== "2||")
-  ).toEqual(["1|remove pdf|", "2||Removed pdf"]);
+  const frames = await paintedFrames(page);
+  expect(frames.filter((f) => f !== "2||")).toEqual([
+    "1||",
+    "1|remove pdf|",
+    "2||Removed pdf",
+  ]);
 });
 
 test("a command is over when serve ended and does not come back", async ({

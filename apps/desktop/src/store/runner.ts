@@ -374,9 +374,6 @@ export const agentx = async (
   if (!read) {
     await refresh();
   }
-  if (useAppStore.getState().pending[options.label] === started.runId) {
-    setPending(options.label, undefined);
-  }
   keepConflicts(outcome.events);
   report(
     args,
@@ -390,5 +387,15 @@ export const agentx = async (
   for (const handle of finishedListeners) {
     handle({ ...outcome, args, command: commandOf(args), read });
   }
+  // The caller goes on in the microtask after this function returns. The control is released in
+  // the one after that, so React renders the release and what the caller did, such as closing
+  // its dialog or selecting a skill, in one commit.
+  queueMicrotask(() => {
+    queueMicrotask(() => {
+      if (useAppStore.getState().pending[options.label] === started.runId) {
+        setPending(options.label, undefined);
+      }
+    });
+  });
   return outcome;
 };

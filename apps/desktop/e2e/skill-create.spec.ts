@@ -34,6 +34,7 @@ import {
 } from "./fixtures/skills.ts";
 import { expect, libraryPath, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
+import { paintedFrames, recordFrames } from "./harness/frames.ts";
 import {
   moreAddActions,
   openCreateSkillDialog,
@@ -156,6 +157,10 @@ test("Create in the Skills header runs skill new with the description and select
     ["skill", "new", NEW_SKILL, "--description", NEW_DESCRIPTION],
     { events: createdEvents, holdAfter: 0 }
   );
+  await recordFrames(page, [
+    '[role="dialog"][data-state="open"] h2',
+    "article h1",
+  ]);
   await createButton(page).click();
   await create.started;
   await expect(createButton(page)).toHaveAttribute("aria-busy", "true");
@@ -172,6 +177,11 @@ test("Create in the Skills header runs skill new with the description and select
   await expect(
     toasts(page).getByText(`Created ${NEW_SKILL} skill`)
   ).toBeVisible();
+  // The dialog closes and the new skill is selected in one frame.
+  expect(await paintedFrames(page)).toEqual([
+    "Create skill|draft",
+    `|${NEW_SKILL}`,
+  ]);
   await expect(
     hubGroup(page).getByRole("button", { exact: true, name: NEW_SKILL })
   ).toHaveAttribute("aria-current", "true");

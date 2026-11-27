@@ -19,11 +19,6 @@ declare global {
       refresh: () => void;
       /** The store's state now: for a test that checks that something did not change. */
       state: () => AppState;
-      /**
-       * What each frame painted since the module loaded, a frame like the one before it left
-       * out: the counter, the commands that run and the toasts, with `|` between them.
-       */
-      frames: () => string[];
     };
   }
 }
@@ -62,27 +57,8 @@ const StoreView = () => {
 
 mount(<StoreView />);
 
-const frames: string[] = [];
-
-const text = (selector: string) =>
-  document.querySelector(selector)?.textContent.trim() ?? "";
-
-const watch = () => {
-  const frame = [
-    text('[aria-label="Counter"]'),
-    text('[aria-label="Running"]'),
-    text('[aria-label^="Notifications"]'),
-  ].join("|");
-  if (frames.at(-1) !== frame) {
-    frames.push(frame);
-  }
-  requestAnimationFrame(watch);
-};
-requestAnimationFrame(watch);
-
 window.store = {
   cancel: cancelCommand,
-  frames: () => frames,
   refresh: () => {
     void refresh();
   },
