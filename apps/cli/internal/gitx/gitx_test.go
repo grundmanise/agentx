@@ -248,6 +248,38 @@ func TestIsolatedStatusAnswersWithTheExitStatus(t *testing.T) {
 	}
 }
 
+// TestGitAnswersWhatItWroteWhateverItLeftRunning: a git that exits while a
+// child it started still holds its output answers all it read and wrote,
+// at once and with no error.
+func TestGitAnswersWhatItWroteWhateverItLeftRunning(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	sleeper, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := exec.LookPath("cat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := filepath.Join(dir, "left")
+	testshim.Write(t, filepath.Join(dir, "git"), "#!/bin/sh\n"+cat+"\necho note >&2\n"+
+		sleeper+" 300 &\necho $! > "+left+"\n")
+	t.Cleanup(func() {
+		if b, err := os.ReadFile(left); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	r := New(map[string]string{"PATH": dir}, false, func(string, ...any) {})
+	var stderr string
+	out, err := r.run(context.Background(), call{stdin: strings.NewReader("input\n"), stderr: &stderr}, "write-tree")
+	if err != nil || out != "input\n" || stderr != "note\n" {
+		t.Errorf("git = %q, stderr %q, %v; want %q, stderr %q, no error", out, stderr, err, "input\n", "note\n")
+	}
+}
+
 // TestAddCheckoutLocksWithTheReason: a checkout is added detached at the
 // commit given and locked with the reason, which git worktree list shows,
 // so that git's own pruning never takes it, and a registration whose

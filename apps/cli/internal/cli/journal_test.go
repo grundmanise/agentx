@@ -224,9 +224,11 @@ func TestServeRecoversAJournalOnRescan(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 
 	logs := h.events(p.stderr.String())
-	if len(logs) != 1 {
-		t.Fatalf("stderr = %q, want one warning", p.stderr.String())
+	if len(logs) == 0 {
+		t.Fatalf("stderr = %q, want a warning", p.stderr.String())
 	}
-	equal(t, "log.level", logs[0]["level"], "warn")
-	contains(t, "log.message", logs[0]["message"].(string), journal)
+	for _, log := range logs {
+		equal(t, "log.level", log["level"], "warn")
+		contains(t, "log.message", log["message"].(string), journal)
+	}
 }

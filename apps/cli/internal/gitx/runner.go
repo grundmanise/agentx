@@ -3,7 +3,6 @@
 package gitx
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -366,18 +365,23 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	if cmd.Dir == "" {
 		cmd.Dir = workDir()
 	}
-	cmd.Stdin = c.stdin
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	// A cancelled context kills git, but git's own children – the transport
-	// of a fetch, the ssh it starts – hold the pipes agentx reads its output
-	// through, and waiting for those to close is waiting for a network call
-	// nobody is reading any more. WaitDelay closes them instead, so that a
-	// run stopped during a fetch ends now rather than when the far end times
-	// out. It never truncates the output of a git that finished: by then the
-	// process has exited and only a child it left behind can still hold a
-	// pipe open.
+	// git reads and writes files rather than pipes. A pipe's output is
+	// whole only once every process holding its write end has closed it:
+	// git's own children, the transport of a fetch or a helper left
+	// running, and, for the moment between fork and exec, any other process
+	// agentx starts at the same time. Waiting for that has no bound, and
+	// cutting the wait short loses what git wrote. A file holds all git
+	// wrote the moment git exits.
+	streams, err := openStreams(c.stdin)
+	if err != nil {
+		return "", 0, fmt.Errorf("git %s: %w", subcommand(args), err)
+	}
+	defer streams.close()
+	if streams.in != nil {
+		cmd.Stdin = streams.in
+	}
+	cmd.Stdout, cmd.Stderr = streams.out, streams.err
+	// The time a git stopped with SIGTERM has before it is killed.
 	cmd.WaitDelay = waitDelay
 	stop := syscall.SIGKILL
 	if c.terminate {
@@ -403,11 +407,15 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 		cmd.Cancel = func() error { return cmd.Process.Signal(stop) }
 	}
 	err = cmd.Run()
-	if stderr.Len() > 0 {
-		r.logf("git stderr: %s", strings.TrimRight(stderr.String(), "\n"))
+	stdout, stderr, readErr := streams.read()
+	if readErr != nil {
+		return "", 0, fmt.Errorf("git %s: %w", subcommand(args), readErr)
+	}
+	if stderr != "" {
+		r.logf("git stderr: %s", strings.TrimRight(stderr, "\n"))
 	}
 	if c.stderr != nil {
-		*c.stderr = stderr.String()
+		*c.stderr = stderr
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -417,7 +425,7 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) && exitErr.ExitCode() >= 1 && exitErr.ExitCode() <= upTo {
-			return stdout.String(), exitErr.ExitCode(), nil
+			return stdout, exitErr.ExitCode(), nil
 		}
 		if stoppedBySignal(err) {
 			// Nothing here cancelled it, so the signal came from outside:
@@ -426,17 +434,16 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 			// the run answer for the stop rather than for the git it killed.
 			r.stopped.Store(true)
 		}
-		detail := strings.TrimSpace(stderr.String())
+		detail := strings.TrimSpace(stderr)
 		if detail == "" {
 			detail = err.Error()
 		}
 		return "", 0, fmt.Errorf("git %s: %s", subcommand(args), detail)
 	}
-	return stdout.String(), 0, nil
+	return stdout, 0, nil
 }
 
-// waitDelay is how long a git that has been killed, or has exited leaving a
-// child of its own behind, may keep agentx waiting on its pipes.
+// waitDelay is how long a git stopped with SIGTERM has to exit.
 const waitDelay = 2 * time.Second
 
 // StoppedChild reports whether a stop signal killed one of this runner's
