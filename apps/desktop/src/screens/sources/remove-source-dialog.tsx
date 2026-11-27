@@ -1,7 +1,6 @@
 // The Remove dialog of a shared source on the Sources screen: Remove runs `source remove <url>`,
-// and when the user also chose the skills this machine installed from it, `skill remove <name>`
-// for each of them first, one after another, stopping at the first that fails. There is no Undo:
-// the skills removed are gone, and the source is added again with Add source.
+// with `--skills` when the user also chose the skills this machine installed from it. There is no
+// Undo: the skills removed are gone, and the source is added again with Add source.
 import { useId, useRef, useState } from "react";
 
 import type { LibraryEntry, Source } from "#/cli/events.gen.ts";
@@ -26,31 +25,15 @@ import { agentx } from "#/store/runner.ts";
 /** The pending label of the removal of the source `id`, with its skills when chosen. */
 export const removeSourceLabel = (id: string) => `remove source ${id}`;
 
-/**
- * Removes `skills`, then the source; the toast names what went, `total` skills in all. When
- * another agentx command holds the lock, Retry resumes from the step that met it.
- */
-const removeSource = async (
-  source: Source,
-  skills: string[],
-  total = skills.length
-) => {
-  const label = removeSourceLabel(source.id);
-  for (const [i, name] of skills.entries()) {
-    // oxlint-disable-next-line no-await-in-loop -- one command at a time, in order
-    const outcome = await agentx(["skill", "remove", name], {
-      label,
-      retry: () => {
-        void removeSource(source, skills.slice(i), total);
-      },
-    });
-    if (outcome.exitCode !== 0) {
-      return;
-    }
+/** Removes the source, with its `skills` installed skills when there are any; the toast names what went. */
+const removeSource = (source: Source, skills: number) => {
+  const args = ["source", "remove", source.url];
+  if (skills > 0) {
+    args.push("--skills");
   }
-  await agentx(["source", "remove", source.url], {
-    label,
-    success: removedText(total),
+  void agentx(args, {
+    label: removeSourceLabel(source.id),
+    success: removedText(skills),
   });
 };
 
@@ -80,7 +63,7 @@ export const RemoveSourceDialog = ({
   };
   const remove = () => {
     confirmed.current = true;
-    void removeSource(source, withSkills ? installed : []);
+    removeSource(source, withSkills ? installed.length : 0);
     close();
   };
   return (

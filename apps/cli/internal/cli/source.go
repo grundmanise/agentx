@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -95,14 +96,33 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceRead(cmd.Context(), args[0], args[1]) },
 	})
 	cmd.AddCommand(newSourceFetchCommand(inv))
-	cmd.AddCommand(&cobra.Command{
-		Use:         "remove <url|id>",
-		Short:       "Remove a source and what was fetched from it",
+	cmd.AddCommand(newSourceRemoveCommand(inv))
+	return cmd
+}
+
+func newSourceRemoveCommand(inv *invocation) *cobra.Command {
+	var skills bool
+	cmd := &cobra.Command{
+		Use:   "remove <url|id>",
+		Short: "Remove a source and what was fetched from it",
+		Long: "Remove a source and what was fetched from it. The skills installed from it stay\n" +
+			"on the machine and are listed as source removed.\n\n" +
+			"With --skills, every skill the library holds that was installed from the source\n" +
+			"is taken off the machine first, as 'agentx skill remove' does it, and then the\n" +
+			"source. A skill that cannot be removed stops the run: the skills before it are\n" +
+			"gone, and the source stays. --skills is refused for the hub, whose skills stay\n" +
+			"on the machine.",
 		Annotations: map[string]string{annotationSection: "sources"},
 		Args:        cobra.ExactArgs(1),
-		Example:     examples("agentx source remove anthropics/skills", "remove it and what was fetched from it"),
-		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceRemove(cmd.Context(), args[0]) },
-	})
+		Example: examples(
+			"agentx source remove anthropics/skills", "remove it and what was fetched from it",
+			"agentx source remove anthropics/skills --skills", "and the skills installed from it",
+		),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return inv.sourceRemove(cmd.Context(), args[0], skills)
+		},
+	}
+	cmd.Flags().BoolVar(&skills, "skills", false, "also remove the skills installed from the source")
 	return cmd
 }
 
@@ -689,10 +709,16 @@ func (inv *invocation) sourceRead(ctx context.Context, arg, subpath string) erro
 // state goes first: if it failed after the entry was gone, nothing would
 // name the source any more and its remote would be unreachable for good.
 //
+// With skills, the skills of the library that were installed from the
+// source go first, in the same hold of the lock, so that whatever watches
+// agentx home sees the skills and the source go together. A skill that
+// cannot be removed ends the run with the source still there; the skills
+// before it are gone, which is signalled and reported all the same.
+//
 // The hub's remote goes with its remote-tracking branches and
 // the tracking configuration of every fork branch that names it, see
 // removeHub.
-func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
+func (inv *invocation) sourceRemove(ctx context.Context, arg string, skills bool) error {
 	id, url, err := inv.sourceToRemove(ctx, arg)
 	if err != nil {
 		return err
@@ -700,12 +726,37 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	if s, err := inv.loadSettings(); err != nil {
 		return err
 	} else if i := s.FindSource(url); i >= 0 && s.Sources[i].Hub {
+		if skills {
+			return fail(exitUsage, "--skills cannot be given for the hub: its skills stay on the machine", "")
+		}
 		return inv.removeHub(ctx, s.Sources[i])
 	}
+	var plans []removalPlan
+	var targets []placeTarget
+	if skills {
+		names, err := inv.installedFrom(ctx, url)
+		if err != nil {
+			return err
+		}
+		targets = inv.detectedTargets()
+		for _, name := range names {
+			plans = append(plans, removalPlan{name: name, whole: true, from: targetIDs(targets)})
+		}
+	}
+	removed := 0
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		gitDir, exists, err := gitx.CheckStore(ctx, inv.git, inv.dirs.Home)
 		if err != nil {
 			return storeFailure(err)
+		}
+		for i := range plans {
+			if err := inv.removeLocked(ctx, &plans[i], targets, gitDir, exists); err != nil {
+				if removed > 0 {
+					_ = home.BumpVersion(inv.dirs.Home)
+				}
+				return mutationFailure(err)
+			}
+			removed++
 		}
 		if exists {
 			if err := source.Remove(ctx, inv.git, gitDir, id); err != nil {
@@ -719,6 +770,11 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 		s.RemoveSource(url)
 		return home.SaveSettings(inv.dirs.Home, s)
 	})
+	if removed > 0 {
+		if reportErr := inv.reportSkillsRemoved(ctx, plans[:removed], targets); err == nil {
+			err = reportErr
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -727,8 +783,47 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	if what == "" {
 		what = id
 	}
+	if skills {
+		inv.summary = "removed " + what + " and " + plural(removed, "skill")
+	}
 	inv.out.done("removed " + inv.out.paint(heading, what))
 	return nil
+}
+
+// reportSkillsRemoved reports the removals of plans from one rescan.
+func (inv *invocation) reportSkillsRemoved(ctx context.Context, plans []removalPlan, targets []placeTarget) error {
+	inventory, err := inv.scan(ctx, lockWait, "", false)
+	if err != nil {
+		return err
+	}
+	for _, plan := range plans {
+		if err := inv.reportRemovedIn(ctx, inventory, plan, targets); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// installedFrom names the skills of the library that were installed from
+// the source at url, A to Z: the managed skills whose import names it. A
+// fork is the hub's, whatever upstream its base came from, and is not one
+// of them.
+func (inv *invocation) installedFrom(ctx context.Context, url string) ([]string, error) {
+	records, err := inv.lineageRecords(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for name, rec := range records {
+		if rec.Kind != lineage.KindManaged || !rec.HasImport || rec.Import.Source != url {
+			continue
+		}
+		if _, ok := librarySkill(inv.dirs.Library, name); ok {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // sourceToRemove resolves what remove was asked to delete: the settings
