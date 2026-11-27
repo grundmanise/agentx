@@ -153,6 +153,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(app_update::Found::default())
+        .manage(app_update::Relaunch::default())
         .setup(|app| {
             let base_env: HashMap<String, String> = std::env::vars_os()
                 .map(|(k, v)| {
@@ -200,6 +201,7 @@ pub fn run() {
         if let RunEvent::Exit = event {
             let sup = app.state::<Arc<Supervisor>>().inner().clone();
             tauri::async_runtime::block_on(sup.shutdown());
+            app_update::relaunch(app);
         }
     });
 }
