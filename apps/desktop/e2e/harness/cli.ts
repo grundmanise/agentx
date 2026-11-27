@@ -168,7 +168,6 @@ export const thisMachine = {
   label: machineLabel,
   library: libraryPath,
   settings_file: "/home/me/.agentx/settings.json",
-  store: "/home/me/.agentx/store.git",
 } as const;
 
 /** The serve log file on the machine a passing launch reports. */

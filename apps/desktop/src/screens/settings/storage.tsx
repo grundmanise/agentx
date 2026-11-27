@@ -1,7 +1,7 @@
-// Storage, in the This machine card: where the library and the store are, as the inventory's
-// machine says, and how much disk the store takes, as the `machine` event reports it. The size is
-// measured each time Settings shows, and the row says so until the measurement ends. The app
-// computes nothing about the machine.
+// Storage, in the This machine card: where the library is, as the inventory's machine says, and
+// how much disk the store takes, as the `machine` event reports it. The store is measured each
+// time Settings shows, and the row says so until the measurement ends. The app computes nothing
+// about the machine.
 import { useEffect } from "react";
 
 import { SettingsRow } from "#/screens/settings/section.tsx";
@@ -25,26 +25,9 @@ export const sizeText = (bytes: number): string => {
   return `${value.toFixed(1)} ${UNITS[unit]}`;
 };
 
-/** The line under Store: its size, or that it is measured. */
-const sizeLine = (bytes: AppState["storeBytes"]) => {
-  if (bytes === undefined) {
-    return "Measuring…";
-  }
-  return bytes === "unknown" ? "Size unknown" : sizeText(bytes);
-};
-
-const Place = ({
-  name,
-  line,
-  value,
-}: {
-  name: string;
-  line?: string;
-  value: string;
-}) => (
+const Place = ({ name, value }: { name: string; value: string }) => (
   <SettingsRow
     name={name}
-    line={line}
     control={
       <span className="type-technical text-text-secondary text-right break-all select-text">
         {value}
@@ -53,25 +36,35 @@ const Place = ({
   />
 );
 
+/** What the Store row says: that the store is measured, then its size or why there is none. */
+const storeText = (store: AppState["store"]): string => {
+  if (store === undefined) {
+    return "Measuring…";
+  }
+  if (store === "unknown") {
+    return "Size unknown";
+  }
+  if (store.store === undefined) {
+    return "Not created yet";
+  }
+  return store.store_bytes === undefined
+    ? "Size unknown"
+    : sizeText(store.store_bytes);
+};
+
 export const StorageRows = () => {
   const library = useAppStore((s) => s.inventory?.machine.library);
-  const store = useAppStore((s) => s.inventory?.machine.store);
-  const bytes = useAppStore((s) => s.storeBytes);
-  const created = store !== undefined;
-  // Measured each time Settings shows: an effect runs again when a kept screen shows again. The
-  // size is forgotten as Settings hides, so the next time it shows the row measures from the start.
-  useEffect(() => (created ? measureStore() : undefined), [created]);
+  const store = useAppStore((s) => s.store);
+  // Measured each time Settings shows: an effect runs again when a kept screen shows again. What
+  // was measured is forgotten as Settings hides, so the next time the row measures from the start.
+  useEffect(() => measureStore(), []);
   if (library === undefined) {
     return null;
   }
   return (
     <>
       <Place name="Library" value={library} />
-      {store === undefined ? (
-        <Place name="Store" value="Not created yet" />
-      ) : (
-        <Place name="Store" line={sizeLine(bytes)} value={store} />
-      )}
+      <Place name="Store" value={storeText(store)} />
     </>
   );
 };

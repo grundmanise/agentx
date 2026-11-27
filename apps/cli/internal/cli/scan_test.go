@@ -772,7 +772,7 @@ func TestScanListsTheLibrary(t *testing.T) {
 	}
 
 	// The sources and the machine are what source list and machine
-	// emit, the store's size aside, which every git write changes.
+	// emit, the store and its size aside, which every git write changes.
 	var sources []any
 	for _, e := range h.eventsOfType(h.mustRun("--json", "source", "list").stdout, "source") {
 		delete(e, "type")
@@ -780,10 +780,9 @@ func TestScanListsTheLibrary(t *testing.T) {
 		sources = append(sources, map[string]any(e))
 	}
 	machine := h.eventsOfType(h.mustRun("--json", "machine").stdout, "machine")[0]
-	for _, field := range []string{"type", "schema_version", "store_bytes"} {
+	for _, field := range []string{"type", "schema_version", "store", "store_bytes"} {
 		delete(machine, field)
 	}
-	equal(t, "store", machine["store"], filepath.Join(h.agentx, "store.git"))
 
 	calls := countingGit(t, h)
 	inventory := h.inventory(t)

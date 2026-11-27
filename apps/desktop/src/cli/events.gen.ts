@@ -121,7 +121,6 @@ export interface Machine {
   home: string;
   settings_file: string;
   library: string;
-  store?: string;
 }
 
 export interface Source {
@@ -407,6 +406,7 @@ export interface ConfigRemovalEvent {
 export interface MachineEvent extends Machine {
   type: "machine";
   schema_version: number;
+  store?: string;
   store_bytes?: number;
 }
 

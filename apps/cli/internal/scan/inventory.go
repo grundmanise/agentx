@@ -41,8 +41,7 @@ type Inventory struct {
 }
 
 // Machine is this machine: its id and label, and where agentx keeps its
-// files on it, as AGENTX_HOME and AGENTX_LIBRARY resolved them. The store
-// is absent until it is created.
+// files on it, as AGENTX_HOME and AGENTX_LIBRARY resolved them.
 type Machine struct {
 	ID           string `json:"id"`
 	Label        string `json:"label"`
@@ -50,7 +49,6 @@ type Machine struct {
 	Home         string `json:"home"`
 	SettingsFile string `json:"settings_file"`
 	Library      string `json:"library"`
-	Store        string `json:"store,omitempty"`
 }
 
 // Settings are the machine settings no other field of the inventory

@@ -1,14 +1,12 @@
 // The Settings page: This machine (the label, saved with `config set label`, and the machine id),
-// Comparing edits (`config set ignore_system_files`), Storage (the library's and the store's
-// paths, and the store's size from `machine`) and Command line (the versions and Run checks).
-// Every row reads the store, whose machine and settings come with the inventory, and every
-// control runs exactly its command. The Editor and Updates cards fill from one read of the app's
-// own settings.
+// Comparing edits (`config set ignore_system_files`), Storage (the library's path and the
+// store's size from `machine`) and Command line (the versions and Run checks). Every row reads
+// the store, whose machine and settings come with the inventory, and every control runs exactly
+// its command. The Editor and Updates cards fill from one read of the app's own settings.
 import type { Page } from "@playwright/test";
 
 import {
   MACHINE_ID,
-  STORE,
   inventoryWith,
   machine,
   scanned,
@@ -89,7 +87,7 @@ test("each card shows what the store holds", async ({ cli, page }) => {
   );
   await expect(thisMachine).toContainText(MACHINE_ID);
   await expect(thisMachine).toContainText(`Library${libraryPath}`);
-  await expect(thisMachine).toContainText(`Store1.5 MiB${STORE}`);
+  await expect(thisMachine).toContainText("Store1.5 MiB");
 
   await expect(section(page, "Hub")).toContainText(
     ".DS_Store, Thumbs.db and editor backups never count as edits. A skill's own .gitignore always applies."
@@ -111,18 +109,18 @@ test("each card shows what the store holds", async ({ cli, page }) => {
 });
 
 test("a store not created yet says so", async ({ cli, page }) => {
-  cli.onServeStart({ events: [inventoryWith({ store: false })] });
+  const { store: _, store_bytes: __, ...fresh } = machine();
+  cli.register(["machine"], { events: [fresh] });
   await page.goto("/#/settings");
   await expect(section(page, "This machine")).toContainText(
     "StoreNot created yet"
   );
 });
 
-test("the store's path shows at once, and its size says Measuring until each measurement ends", async ({
+test("the store says Measuring until each measurement ends", async ({
   cli,
   page,
 }) => {
-  cli.onServeStart({ events: [inventoryWith()] });
   const first = cli.register(["machine"], {
     events: [machine()],
     holdAfter: 0,
@@ -130,9 +128,9 @@ test("the store's path shows at once, and its size says Measuring until each mea
   await page.goto("/#/settings");
   await first.started;
   const thisMachine = section(page, "This machine");
-  await expect(thisMachine).toContainText(`StoreMeasuring…${STORE}`);
+  await expect(thisMachine).toContainText("StoreMeasuring…");
   first.release();
-  await expect(thisMachine).toContainText(`Store1.5 MiB${STORE}`);
+  await expect(thisMachine).toContainText("Store1.5 MiB");
 
   // Shown again, Settings measures again and shows no size from the time before.
   const second = cli.register(["machine"], {
@@ -142,9 +140,9 @@ test("the store's path shows at once, and its size says Measuring until each mea
   await page.getByRole("link", { name: "Skills" }).click();
   await page.getByRole("link", { name: "Settings" }).click();
   await second.started;
-  await expect(thisMachine).toContainText(`StoreMeasuring…${STORE}`);
+  await expect(thisMachine).toContainText("StoreMeasuring…");
   second.release();
-  await expect(thisMachine).toContainText(`Store3.0 MiB${STORE}`);
+  await expect(thisMachine).toContainText("Store3.0 MiB");
 });
 
 test("the Editor and Updates rows show together with the inventory's, from one read each time Settings shows", async ({

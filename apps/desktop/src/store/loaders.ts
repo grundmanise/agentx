@@ -1,4 +1,4 @@
-// The slices that one-shot reads fill: the adoption preview, the store's size and what screens
+// The slices that one-shot reads fill: the adoption preview, the store and what screens
 // read on demand. This machine, its settings and its sources come with the inventory instead
 // (src/store/feed.ts). The adoption preview loads once the startup checks pass, after an import,
 // when Settings opens and on Check updates. A `skill check-updates` run sets when the last
@@ -80,8 +80,8 @@ const load = async (
 /** The label of the control that loads `args`, for `usePending`. */
 export const loadLabel = (args: string[]) => `load ${args.join(" ")}`;
 
-// The latest measurement of the store: one that ends after a later one began, or after the size
-// was forgotten, writes nothing.
+// The latest measurement of the store: one that ends after a later one began, or after it was
+// forgotten, writes nothing.
 let measurement = 0;
 
 const measure = async () => {
@@ -97,24 +97,23 @@ const measure = async () => {
   }
   const event = outcome.events.find((e) => e.type === "machine");
   useAppStore.setState({
-    // A store that holds no file has no `store_bytes`.
-    storeBytes:
+    store:
       outcome.exitCode === 0 && event !== undefined
-        ? (event.store_bytes ?? 0)
+        ? { store: event.store, store_bytes: event.store_bytes }
         : "unknown",
   });
 };
 
 /**
- * Measures the store: `machine`, whose `store_bytes` the inventory leaves out. Storage calls it
- * each time it shows a store. Returns what forgets the size, for when Storage hides: the next
- * time it shows, the size is measured again.
+ * Measures the store: `machine`, whose `store` and `store_bytes` the inventory leaves out.
+ * Storage calls it each time it shows. Returns what forgets the measurement, for when Storage
+ * hides: the next time it shows, the store is measured again.
  */
 export const measureStore = (): (() => void) => {
   void measure();
   return () => {
     measurement += 1;
-    useAppStore.setState({ storeBytes: undefined });
+    useAppStore.setState({ store: undefined });
   };
 };
 

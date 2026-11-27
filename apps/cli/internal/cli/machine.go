@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -14,13 +15,14 @@ import (
 )
 
 // machineEvent is the machine as the inventory's machine field has it,
-// with the store's size, which the inventory leaves out: every git write
-// changes the size, and a scan reports no change of it. The size is absent
-// until the store is created.
+// with the store and its size, which the inventory leaves out: every git
+// write changes the size, and a scan reports no change of it. The store
+// and its size are absent until the repo is created.
 type machineEvent struct {
 	event
 	scan.Machine
-	StoreBytes int64 `json:"store_bytes,omitempty"`
+	Store      string `json:"store,omitempty"`
+	StoreBytes int64  `json:"store_bytes,omitempty"`
 }
 
 func newMachineCommand(inv *invocation) *cobra.Command {
@@ -128,28 +130,26 @@ func (inv *invocation) machine(ctx context.Context) (machineEvent, error) {
 		return machineEvent{}, err
 	}
 	m := machineEvent{event: newEvent("machine"), Machine: inv.machineOf(id, derivation, s)}
-	if m.Store == "" {
-		return m, nil
-	}
-	// The size is the one the user asks about: that of the files, read
-	// without a git process.
-	if m.StoreBytes, err = dirSize(m.Store); err != nil {
+	// The store is reported from files alone, without a git process: a
+	// present directory is the repo whether or not git can read it, which
+	// is doctor's question, and its size is the one the user asks about.
+	repo := gitx.StorePath(inv.dirs.Home)
+	size, err := dirSize(repo)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
 		return machineEvent{}, err
+	default:
+		m.Store, m.StoreBytes = repo, size
 	}
 	return m, nil
 }
 
 // machineOf is this machine, with id and derivation, as the settings s
-// label it. The store is named from files alone, without a git process:
-// a present directory is the store whether or not git can read it, which
-// is doctor's question.
+// label it.
 func (inv *invocation) machineOf(id, derivation string, s home.Settings) scan.Machine {
-	m := scan.Machine{ID: id, Label: inv.label(s), Derivation: derivation,
+	return scan.Machine{ID: id, Label: inv.label(s), Derivation: derivation,
 		Home: inv.dirs.Home, SettingsFile: home.SettingsPath(inv.dirs.Home), Library: inv.dirs.Library}
-	if store := gitx.StorePath(inv.dirs.Home); lexists(store) {
-		m.Store = store
-	}
-	return m
 }
 
 // dirSize is the size on disk of the tree under root: the sizes of the
