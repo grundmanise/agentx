@@ -114,12 +114,11 @@ Serve uses your shell's environment, so it serves the agentx home of `HOME`, or 
 `container/browser` runs the app in a browser against the real `agentx serve` inside a Docker container, on a home built from a machine preset, and drives it with [agent-browser](https://agent-browser.dev). It needs only Docker (Docker Desktop, OrbStack or colima on a Mac), and touches nothing on your machine: the container has no network, no host folder and no published port, runs as a user other than root, and gets its own home. Each worktree gets its own image and container, so worktrees run side by side.
 
 ```sh
-container/browser up typical             # build the image from this worktree, build the home, start the app
-container/browser ab open http://localhost:1431   # agent-browser inside the container
-container/browser ab set viewport 1440 900
-container/browser shot skills.png        # a screenshot at 2x, in /tmp/out
-container/browser ab record start /tmp/out/flow.webm
-container/browser pull                   # copy /tmp/out to .browser/ in the worktree
+container/browser up typical                       # build the image from this worktree, build the home, start the app
+container/browser exec agent-browser skills get core   # agent-browser's own guide, for its installed version
+container/browser exec agent-browser open http://localhost:1431
+container/browser exec agent-browser screenshot /tmp/out/skills.png
+container/browser pull                             # copy /tmp/out to .browser/ in the worktree
 container/browser down
 ```
 
