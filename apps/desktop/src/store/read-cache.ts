@@ -1,6 +1,6 @@
-// The kept reads: what a skill's files, history and diffs, a source's listing and a SKILL.md read
-// returned, kept in IndexedDB for the next launch. A read for the same version as one kept is
-// served from here, so a skill selected after a relaunch shows at once. One entry is kept per
+// The kept reads: what the read of a skill, a source's listing and a SKILL.md read returned, kept
+// in IndexedDB for the next launch. A read for the same version as one kept is served from here,
+// so a skill selected after a relaunch shows at once. One entry is kept per
 // skill or source and kind of read, the latest; past CACHE_BYTES the least recently used go first.
 // What another build of the app kept is dropped, since its events may have another shape. It is
 // a cache: every failure here is a miss, and the app works the same without it.
@@ -8,13 +8,7 @@ import { createStorage } from "unstorage";
 import indexedDbDriver from "unstorage/drivers/indexedb";
 
 /** The kinds of read kept, each under its own keys. */
-export type ReadKind =
-  | "files"
-  | "history"
-  | "installable"
-  | "listing"
-  | "skill-md"
-  | "update-diff";
+export type ReadKind = "installable" | "listing" | "skill" | "skill-md";
 
 /** How much the kept reads may hold, in UTF-16 code units of their JSON: about 25 MB. */
 export const CACHE_BYTES = 25 * 1024 * 1024;

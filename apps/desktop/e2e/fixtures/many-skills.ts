@@ -4,7 +4,7 @@ import type { Plugin, SkillNode } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
 import {
-  fileReads as baseFileReads,
+  showReads as baseShowReads,
   filesOf,
   inventory as base,
 } from "./skills.ts";
@@ -113,9 +113,9 @@ export const inventory = {
   skills: [...base.skills, ...pluginSkills, ...unmanagedSkills],
 } satisfies InlineEvent;
 
-/** The `skill files` read of every skill of the inventory, as the app names each one. */
-export const fileReads = [
-  ...baseFileReads,
+/** The `skill show` read of every skill of the inventory, as the app names each one. */
+export const showReads = [
+  ...baseShowReads,
   ...numbers(PLUGIN_SKILLS).map((n) => ({
     args: [`${pluginOf(n)}:${pluginSkillName(n)}`],
     events: filesOf(pluginSkillName(n)),

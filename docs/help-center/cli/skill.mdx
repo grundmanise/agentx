@@ -479,7 +479,7 @@ pdf has 5 files in /home/me/.agents/skills/pdf
   reference.pdf              310400 bytes  over 256 KiB
 ```
 
-The desktop app uses this command to show a skill's files. It reads every file and changes nothing. With `--json`, each file is one event that also carries the file's content, as text with `U+FFFD` for a byte that is not valid UTF-8. A binary file, one with a NUL byte among its first 8000, and a file over 256 KiB are described, never printed: the event says `binary` or `truncated` and carries no content.
+The command reads every file and changes nothing. With `--json`, each file is one event that also carries the file's content, as text with `U+FFFD` for a byte that is not valid UTF-8. A binary file, one with a NUL byte among its first 8000, and a file over 256 KiB are described, never printed: the event says `binary` or `truncated` and carries no content.
 
 - Name a skill of your library by its name, and a plugin's skill as for [`agentx skill fork`](/cli/fork#fork-a-plugin’s-skill): as `<plugin>:<name>`.
 - To read a skill directory that one client holds on its own, which is neither in your library nor a plugin's, name the client with `--configuration`: `agentx skill files commit --configuration claude-code`.
@@ -487,6 +487,38 @@ The desktop app uses this command to show a skill's files. It reads every file a
 - The files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db` and swap files, are left out while `ignore_system_files` is on, the default.
 - A symlink to a file is read as the file an agent reads through it. A symlink to a directory, a `.git` directory and anything that is not a file are left out with a warning.
 - A skill, a plugin's skill or a configuration you name that does not exist stops the command with exit code 5.
+
+### Read all of a skill in one run
+
+To read the files of a skill, its unpublished edits, its update and its history in one run, use `skill show`:
+
+```sh
+agentx skill show pdf
+```
+
+```text
+pdf has 2 files in /home/me/.agents/skills/pdf
+  SKILL.md  412 bytes   14 lines
+  forms.md  1270 bytes  31 lines
+pdf differs from its base version at 43900e0 in 1 file
+diff --git a/forms.md b/forms.md
+...
+the update of pdf at 4e7ae37 differs from its base version at 43900e0 in 1 file
+diff --git a/forms.md b/forms.md
+...
+```
+
+The desktop app uses this command to show a skill. The command prints these parts in this order:
+
+1. The files, as `agentx skill files` prints them.
+2. The unpublished edits, as [`agentx skill diff <name>`](#see-what-you-changed) prints them.
+3. What the update would apply, as [`agentx skill diff <name> --update`](#read-an-update) prints it.
+4. The history, as [`agentx skill history <name>`](/cli/fork#read-a-skill’s-history) prints it.
+
+- The command leaves out a part that the skill does not have. An unmanaged skill has no edits to compare. A skill with no update known has no update to show. Only a hub skill has a history.
+- Name the skill as for `skill files`, with `--configuration` for a skill directory that one client holds on its own. A plugin's skill and a skill of one client have files only.
+- With `--json`, each part sends the events of its own command. A `diff` event of the update has `update` set to `true`.
+- The command does not use the network.
 
 ## Check for updates
 

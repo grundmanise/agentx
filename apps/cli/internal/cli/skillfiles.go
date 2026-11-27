@@ -39,14 +39,28 @@ func newSkillFilesCommand(inv *invocation) *cobra.Command {
 			"in that configuration's own skills directory, a plugin's left out.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Flags().Changed("configuration") && strings.TrimSpace(configuration) == "" {
-				return fail(exitUsage, "--configuration needs a configuration", "name one by its id, such as claude-code; 'agentx scan' lists them")
+			if err := configurationNamed(cmd, configuration); err != nil {
+				return err
 			}
 			return inv.skillFiles(cmd.Context(), args[0], configuration)
 		},
 	}
-	cmd.Flags().StringVar(&configuration, "configuration", "", "read the skill in this configuration's own skills directory")
+	configurationFlag(cmd, &configuration)
 	return cmd
+}
+
+// configurationFlag gives cmd the --configuration flag of the commands that
+// read a skill's files.
+func configurationFlag(cmd *cobra.Command, configuration *string) {
+	cmd.Flags().StringVar(configuration, "configuration", "", "read the skill in this configuration's own skills directory")
+}
+
+// configurationNamed refuses a --configuration given with no configuration.
+func configurationNamed(cmd *cobra.Command, configuration string) error {
+	if cmd.Flags().Changed("configuration") && strings.TrimSpace(configuration) == "" {
+		return fail(exitUsage, "--configuration needs a configuration", "name one by its id, such as claude-code; 'agentx scan' lists them")
+	}
+	return nil
 }
 
 // skillFileEvent is one file of a skill as skill files reads it. Content
@@ -110,10 +124,29 @@ func fileFacts(data []byte, size int64) (binary, truncated bool, lines int) {
 	return false, false, lines
 }
 
+// skillFilesRead is the files of one skill as readSkillFiles read them: the
+// skill's name as its events carry it, the skill as the text names it, the
+// directory read, and whether that is the library's entry.
+type skillFilesRead struct {
+	name, subject, dir string
+	files              []skillFile
+	library            bool
+}
+
 // skillFiles reads every file of the skill arg names and reports them, see
-// newSkillFilesCommand. The library is looked in first, then the plugins
-// the scan found, as skill fork looks; with configuration, that
-// configuration's own skills directory alone.
+// newSkillFilesCommand.
+func (inv *invocation) skillFiles(ctx context.Context, arg, configuration string) error {
+	read, err := inv.readSkillFiles(ctx, arg, configuration)
+	if err != nil {
+		return err
+	}
+	inv.reportSkillFiles(read)
+	return nil
+}
+
+// readSkillFiles reads every file of the skill arg names. The library is
+// looked in first, then the plugins the scan found, as skill fork looks;
+// with configuration, that configuration's own skills directory alone.
 //
 // A library skill is read under the shared lock, as a scan reads, so that
 // a mutation in progress is waited for and no file is read from half-
@@ -123,64 +156,57 @@ func fileFacts(data []byte, size int64) (binary, truncated bool, lines int) {
 // so a file that version holds counts whatever an ignore rule says. A
 // plugin's or a configuration's skill is found by the scan, which takes
 // the lock itself, and read where its occurrence leads.
-func (inv *invocation) skillFiles(ctx context.Context, arg, configuration string) error {
+func (inv *invocation) readSkillFiles(ctx context.Context, arg, configuration string) (skillFilesRead, error) {
 	if configuration != "" {
 		if err := inv.detectedConfiguration(configuration); err != nil {
-			return err
+			return skillFilesRead{}, err
 		}
 		inventory, err := inv.scan(ctx, lockWait, "", false)
 		if err != nil {
-			return err
+			return skillFilesRead{}, err
 		}
 		o, err := configurationSkill(inventory, configuration, arg)
 		if err != nil {
-			return err
+			return skillFilesRead{}, err
 		}
 		files, err := inv.readSkillDir(o.ResolvedPath, nil, inv.systemFilesIgnored())
 		if err != nil {
-			return err
+			return skillFilesRead{}, err
 		}
-		inv.reportSkillFiles(arg, sanitised(arg)+" in "+configuration, o.ResolvedPath, files)
-		return nil
+		return skillFilesRead{name: arg, subject: sanitised(arg) + " in " + configuration, dir: o.ResolvedPath, files: files}, nil
 	}
-	var files []skillFile
-	var dir string
-	held := false
+	read := skillFilesRead{name: arg, subject: sanitised(arg)}
 	err := inv.readLocked(ctx, lockWait, func() error {
 		lib, ok := librarySkill(inv.dirs.Library, arg)
 		if !ok {
 			return nil
 		}
-		held = true
+		read.library = true
 		ignored, err := inv.libraryIgnored(ctx, arg, lib)
 		if err != nil {
 			return err
 		}
-		dir = lib.ResolvedPath
-		files, err = inv.readSkillDir(dir, ignored, inv.systemFilesIgnored())
+		read.dir = lib.ResolvedPath
+		read.files, err = inv.readSkillDir(read.dir, ignored, inv.systemFilesIgnored())
 		return err
 	})
-	if err != nil {
-		return err
-	}
-	if held {
-		inv.reportSkillFiles(arg, sanitised(arg), dir, files)
-		return nil
+	if err != nil || read.library {
+		return read, err
 	}
 	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
-		return err
+		return skillFilesRead{}, err
 	}
 	o, err := pluginOccurrence(inventory, arg)
 	if err != nil {
-		return err
+		return skillFilesRead{}, err
 	}
 	name := filepath.Base(o.Path)
-	if files, err = inv.readSkillDir(o.ResolvedPath, nil, inv.systemFilesIgnored()); err != nil {
-		return err
+	files, err := inv.readSkillDir(o.ResolvedPath, nil, inv.systemFilesIgnored())
+	if err != nil {
+		return skillFilesRead{}, err
 	}
-	inv.reportSkillFiles(name, sanitised(name)+" of plugin "+sanitised(o.Plugin), o.ResolvedPath, files)
-	return nil
+	return skillFilesRead{name: name, subject: sanitised(name) + " of plugin " + sanitised(o.Plugin), dir: o.ResolvedPath, files: files}, nil
 }
 
 // readLocked runs read, a command's local reads, under the shared lock of
@@ -415,20 +441,19 @@ func readHead(full string, n int) ([]byte, error) {
 	return buf[:read], nil
 }
 
-// reportSkillFiles emits one skill_file event per file of the skill called
-// name, and prints one row per file under a line that says what was read
-// and from where, subject being the skill as the line names it. The rows
-// hold the path, the size, what the file is, binary, over the limit or so
-// many lines, and whether git ignores it; the content is for the events.
-func (inv *invocation) reportSkillFiles(name, subject, dir string, files []skillFile) {
+// reportSkillFiles emits one skill_file event per file read, and prints one
+// row per file under a line that says what was read and from where. The
+// rows hold the path, the size, what the file is, binary, over the limit or
+// so many lines, and whether git ignores it; the content is for the events.
+func (inv *invocation) reportSkillFiles(read skillFilesRead) {
 	out := inv.out
-	for _, f := range files {
-		out.emit(f.event(name))
+	for _, f := range read.files {
+		out.emit(f.event(read.name))
 	}
-	inv.summary = subject + " has " + plural(len(files), "file")
-	out.print(out.paint(heading, subject), " has ", out.paint(noteStyle, plural(len(files), "file")), " in ", quotedPath(dir))
+	inv.summary = read.subject + " has " + plural(len(read.files), "file")
+	out.print(out.paint(heading, read.subject), " has ", out.paint(noteStyle, plural(len(read.files), "file")), " in ", quotedPath(read.dir))
 	t := &table{}
-	for _, f := range files {
+	for _, f := range read.files {
 		f.row(t)
 	}
 	out.render(t, "  ")

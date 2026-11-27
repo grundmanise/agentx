@@ -20,7 +20,7 @@ import {
   skillshareNames,
   skillshareRun,
 } from "./fixtures/adopt-all.ts";
-import { fileReads, filesOf, history } from "./fixtures/skills.ts";
+import { filesOf, registerShowReads } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
@@ -54,25 +54,15 @@ const ran = (cli: MockCli) =>
     (l) =>
       !["version", "doctor", "machine"].includes(l[0] ?? "") &&
       !loadLines.some((known) => known.join(" ") === l.join(" ")) &&
-      !["skill files", "skill diff", "skill history"].includes(
-        l.slice(0, 2).join(" ")
-      )
+      l.slice(0, 2).join(" ") !== "skill show"
   );
 
 /** Registers the reads the Skills screen runs for the skills it may select. */
 const registerReads = (cli: MockCli) => {
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  cli.register(["skill", "history", "release-notes"]);
-  cli.register(["skill", "history", "draft"]);
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
+  registerShowReads(cli);
   for (const name of [...skillsCliNames, ...skillshareNames, "legacy"]) {
-    cli.register(["skill", "files", name], { events: filesOf(name) });
+    cli.register(["skill", "show", name], { events: filesOf(name) });
   }
-  cli.register(["skill", "diff", "review"]);
-  cli.register(["skill", "diff", "release-notes"]);
-  cli.register(["skill", "diff", "pdf-letters"]);
 };
 
 /** Opens the Skills screen on the machine with skills of both tools to adopt. */

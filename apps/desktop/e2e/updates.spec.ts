@@ -6,12 +6,7 @@
 // itself.
 import type { Page } from "@playwright/test";
 
-import {
-  fileReads,
-  history,
-  releaseNotesDiffs,
-  reviewDiffs,
-} from "./fixtures/skills.ts";
+import { registerShowReads, showReads } from "./fixtures/skills.ts";
 import {
   lettersHubDiffs,
   lettersUpdateDiffs,
@@ -44,20 +39,22 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-/**
- * The reads the detail pane runs on its own when a skill is selected, what its update changes
- * among them.
- */
-const detailReads = new Set(["skill history", "skill files", "skill diff"]);
-
 /** The command lines the buttons ran: everything but the launch, the store's and the pane's reads. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
       ![...launchLines, ...loadLines].some(
         (k) => k.join(" ") === l.join(" ")
-      ) && !detailReads.has(l.slice(0, 2).join(" "))
+      ) && l.slice(0, 2).join(" ") !== "skill show"
   );
+
+/** What `skill show <name>` emits when the update of the fixture skill `name` changes `diffs`. */
+const showOf = (name: string, diffs: InlineEvent[]): InlineEvent[] => [
+  ...(showReads.find((read) => read.args[0] === name)?.events ?? []).filter(
+    (e) => !(e.type === "diff" && e.update === true)
+  ),
+  ...diffs,
+];
 
 const pane = (page: Page, name: string) =>
   page
@@ -124,7 +121,7 @@ const rescan = async (cli: MockCli, names: readonly string[]) => {
 /**
  * Opens the Skills screen on the fixture machine, on `name`, with serve's first inventory offering
  * an update for each skill of `names`, or the updates of `library`, and `updateDiffs` as what
- * `skill diff <skill> --update` answers, by skill.
+ * the read of a skill says its update changes, by skill.
  */
 const open = async (
   cli: MockCli,
@@ -135,20 +132,10 @@ const open = async (
   updateDiffs = updateDiffsOf
 ) => {
   cli.onServeStart({ events: [inventoryOf(library)] });
+  registerShowReads(cli);
   for (const [skill, diffs] of Object.entries(updateDiffs)) {
-    cli.register(["skill", "diff", skill, "--update"], { events: diffs });
+    cli.register(["skill", "show", skill], { events: showOf(skill, diffs) });
   }
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  cli.register(["skill", "history", "release-notes"], { events: [] });
-  cli.register(["skill", "history", "draft"], { events: [] });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  cli.register(["skill", "diff", "review"], { events: reviewDiffs });
-  cli.register(["skill", "diff", "release-notes"], {
-    events: releaseNotesDiffs,
-  });
-  cli.register(["skill", "diff", "pdf-letters"], { events: [] });
   await page.goto(`/#/skills/${encodeURIComponent(name)}`);
   await expect(pane(page, name)).toBeVisible();
 };
@@ -381,8 +368,8 @@ test.describe("banners", () => {
     cli.register(["skill", "update", "pdf-letters"], {
       events: [updated("pdf-letters", "modified")],
     });
-    cli.register(["skill", "diff", "pdf-letters", "--update"], {
-      events: lettersUpdateDiffs,
+    cli.register(["skill", "show", "pdf-letters"], {
+      events: showOf("pdf-letters", lettersUpdateDiffs),
     });
     await update(page, "pdf-letters").click();
     await expect(
@@ -687,8 +674,8 @@ test.describe("the Update skills dialog", () => {
 
     // See changes opens What's new above the dialog; Escape closes the sheet alone and puts the
     // focus back on See changes.
-    cli.register(["skill", "diff", "pdf", "--update"], {
-      events: pdfUpdateDiffs,
+    cli.register(["skill", "show", "pdf"], {
+      events: showOf("pdf", pdfUpdateDiffs),
     });
     const seeChanges = skillRow("pdf").getByRole("button", {
       exact: true,

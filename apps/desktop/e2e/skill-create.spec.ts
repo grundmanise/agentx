@@ -26,12 +26,9 @@ import {
 } from "./fixtures/skill-create.ts";
 import {
   adoption,
-  fileReads,
   filesOf,
-  history,
   inventory,
-  releaseNotesDiffs,
-  reviewDiffs,
+  registerShowReads,
 } from "./fixtures/skills.ts";
 import { expect, libraryPath, loadLines, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
@@ -46,16 +43,13 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-/** The reads the detail pane runs on its own when a skill is selected. */
-const detailReads = new Set(["skill history", "skill files", "skill diff"]);
-
 /** The command lines the dialog ran: everything but the launch, the store's and the pane's reads. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
       ![...launchLines, ...loadLines].some(
         (known) => known.join(" ") === l.join(" ")
-      ) && !detailReads.has(l.slice(0, 2).join(" "))
+      ) && l.slice(0, 2).join(" ") !== "skill show"
   );
 
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
@@ -82,19 +76,8 @@ const createButton = (page: Page) =>
 const registerReads = (cli: MockCli, machine: InlineEvent = inventory) => {
   cli.onServeStart({ events: [machine] });
   cli.register(["skill", "import"], { events: adoption });
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  cli.register(["skill", "history", "release-notes"], { events: [] });
-  cli.register(["skill", "history", "draft"], { events: [] });
-  cli.register(["skill", "history", NEW_SKILL], { events: [] });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  cli.register(["skill", "files", NEW_SKILL], { events: filesOf(NEW_SKILL) });
-  cli.register(["skill", "diff", "review"], { events: reviewDiffs });
-  cli.register(["skill", "diff", "release-notes"], {
-    events: releaseNotesDiffs,
-  });
-  cli.register(["skill", "diff", "pdf-letters"], { events: [] });
+  registerShowReads(cli);
+  cli.register(["skill", "show", NEW_SKILL], { events: filesOf(NEW_SKILL) });
 };
 
 /** Opens the Skills screen on the fixture machine and waits for its rows. */
@@ -258,7 +241,7 @@ test("Add skill finds the skills under a link, and installs the two picked in th
   await expect(findButton(page)).toBeDisabled();
   await expect(nextButton(page)).toBeDisabled();
   for (const name of ADDED_SKILLS) {
-    cli.register(["skill", "files", name], { events: filesOf(name) });
+    cli.register(["skill", "show", name], { events: filesOf(name) });
   }
 
   // Enter in the field finds the skills under the link.

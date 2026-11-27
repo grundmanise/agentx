@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { ForkOrigin, HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
@@ -19,10 +19,9 @@ import { formatDate } from "#/lib/dates.ts";
 import { openInBrowser } from "#/lib/open-url.ts";
 import { isMac } from "#/lib/platform.ts";
 import { trackAttribute } from "#/lib/track.ts";
-import { useKeptRead } from "#/screens/skills/kept-read.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
-import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
+import type { SkillRead } from "#/store/store.ts";
 
 /** How many entries the timeline shows before "Show all". */
 const SHOWN = 3;
@@ -47,14 +46,6 @@ export const metaOf = (e: HistoryEvent, here: string | undefined) => {
 
 /** Whether History lists a commit: every one but the upstream versions agentx stored. */
 export const isShown = (e: HistoryEvent) => e.import !== true;
-
-/** The version a skill's history is read for: a new read when the skill changed. */
-const versionOf = (row: SkillRow) =>
-  [
-    row.entry?.content_hash ?? "",
-    row.entry?.state ?? "",
-    ...(row.entry?.drift ?? []),
-  ].join(":");
 
 /**
  * The page of the skill a fork came from, on the commit that created the fork, when the CLI knows
@@ -338,21 +329,19 @@ const HistorySheet = ({
 );
 
 /**
- * HISTORY in the detail pane, for a hub skill: the latest commits of its branch from
- * `skill history <name>`, read when the skill is selected; "Show all" opens the sheet. In the
+ * HISTORY in the detail pane, for a hub skill: the latest commits of its branch from the pane's
+ * read, `read`, undefined until a first one is in; "Show all" opens the sheet. In the
  * subject of the commit that created a fork, the origin's name links to its page, when the CLI
  * knows one. Other skills have no history of their own, and the pane shows no section for them.
  */
-export const HistorySection = ({ row }: { row: SkillRow }) => {
-  const version = versionOf(row);
-  const stored = useAppStore((s) => s.histories[row.name]);
-  // A read of another version is not this version's history; the one shown before stays meanwhile.
-  const read = useKeptRead(stored?.version === version ? stored : undefined);
+export const HistorySection = ({
+  row,
+  read,
+}: {
+  row: SkillRow;
+  read: SkillRead | undefined;
+}) => {
   const [sheetOpen, setSheetOpen] = useState(false);
-
-  useEffect(() => {
-    void loadHistory(row.name, version);
-  }, [row.name, version]);
 
   if (read === undefined) {
     return (
@@ -366,7 +355,7 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
       </p>
     );
   }
-  const entries = read.entries.filter(isShown);
+  const entries = read.history.filter(isShown);
   if (entries.length === 0) {
     return <p className="type-secondary text-text-hint m-0">No history yet</p>;
   }

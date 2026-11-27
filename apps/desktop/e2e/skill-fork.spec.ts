@@ -13,7 +13,7 @@ import {
   refusedInPlace,
   twoPluginsInventory,
 } from "./fixtures/fork.ts";
-import { adoption, fileReads, filesOf } from "./fixtures/skills.ts";
+import { adoption, filesOf, registerShowReads } from "./fixtures/skills.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -26,10 +26,7 @@ const launchLines = [
 const isRead = (line: string[]) =>
   [...launchLines, ...loadLines].some(
     (known) => known.join(" ") === line.join(" ")
-  ) ||
-  ["skill history", "skill files", "skill diff"].includes(
-    line.slice(0, 2).join(" ")
-  );
+  ) || line.slice(0, 2).join(" ") === "skill show";
 
 /** The command lines the Fork controls ran. */
 const forks = (cli: MockCli) => cli.commands.filter((l) => !isRead(l));
@@ -67,13 +64,9 @@ const openSkill = async (
   cli.onServeStart({ events: [first] });
   cli.register(["skill", "import"], { events: adoption });
   for (const n of libraryNames) {
-    cli.register(["skill", "history", n], { events: [] });
-    cli.register(["skill", "files", n], { events: filesOf(n) });
-    cli.register(["skill", "diff", n], { events: [] });
+    cli.register(["skill", "show", n], { events: filesOf(n) });
   }
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
+  registerShowReads(cli);
   await page.goto(`/#/skills/${encodeURIComponent(key)}`);
   await expect(pane(page, name)).toBeVisible();
 };
@@ -386,7 +379,7 @@ test("a plugin's skill several plugins provide is named <plugin>:<skill>", async
     first: twoPluginsInventory,
     key: "skill:h-commit",
   });
-  cli.register(["skill", "files", "team-tools:commit-helper"], {
+  cli.register(["skill", "show", "team-tools:commit-helper"], {
     events: filesOf("commit-helper"),
   });
   await actions(page, "commit-helper")

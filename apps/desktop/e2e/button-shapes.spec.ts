@@ -3,12 +3,7 @@
 // on its outer corners only.
 import type { Locator } from "@playwright/test";
 
-import {
-  fileReads,
-  history,
-  releaseNotesDiffs,
-  reviewDiffs,
-} from "./fixtures/skills.ts";
+import { filesOf, registerShowReads } from "./fixtures/skills.ts";
 import { pdfUpdateDiffs } from "./fixtures/update-diffs.ts";
 import { updatesInventory } from "./fixtures/updates.ts";
 import { expect, test } from "./harness/cli.ts";
@@ -49,16 +44,9 @@ test("ghost and danger buttons have a resting fill; a button group makes one sha
   page,
 }) => {
   cli.onServeStart({ events: [updatesInventory] });
-  cli.register(["skill", "diff", "pdf", "--update"], {
-    events: pdfUpdateDiffs,
-  });
-  cli.register(["skill", "history", "pdf-letters"], { events: history });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  cli.register(["skill", "diff", "review"], { events: reviewDiffs });
-  cli.register(["skill", "diff", "release-notes"], {
-    events: releaseNotesDiffs,
+  registerShowReads(cli);
+  cli.register(["skill", "show", "pdf"], {
+    events: [...filesOf("pdf"), ...pdfUpdateDiffs],
   });
   await page.goto("/#/skills/pdf");
   const article = page

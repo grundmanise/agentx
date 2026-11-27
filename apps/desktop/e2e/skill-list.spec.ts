@@ -4,14 +4,14 @@
 import type { Page } from "@playwright/test";
 
 import {
-  fileReads,
   inventory,
   listedPluginSkill,
   PLUGIN_SKILL_COUNT,
   SKILL_COUNT,
+  showReads,
   SKILLS_PER_PLUGIN,
 } from "./fixtures/many-skills.ts";
-import { adoption } from "./fixtures/skills.ts";
+import { adoption, registerShowReads } from "./fixtures/skills.ts";
 import type { MockCli } from "./harness/cli.ts";
 import { expect, test } from "./harness/cli.ts";
 
@@ -27,9 +27,7 @@ const pane = (page: Page, name: string) =>
 const openAt = async (cli: MockCli, page: Page, name: string) => {
   cli.onServeStart({ events: [inventory] });
   cli.register(["skill", "import"], { events: adoption });
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
+  registerShowReads(cli, showReads);
   // The route names a skill far down the list, as when another screen opens it.
   await page.goto(`/#/skills/${encodeURIComponent(`skill:h-${name}`)}`);
   await expect(page.getByLabel(`${SKILL_COUNT} skills`)).toBeVisible();

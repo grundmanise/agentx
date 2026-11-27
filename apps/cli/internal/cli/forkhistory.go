@@ -131,6 +131,13 @@ func (inv *invocation) skillHistory(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	return inv.historyOf(ctx, gitDir, rec, held, name)
+}
+
+// historyOf is skillHistory of the skill called name, rec being the branch
+// the store at gitDir holds for it and held whether it holds one, see
+// hubRecord.
+func (inv *invocation) historyOf(ctx context.Context, gitDir string, rec lineage.Record, held bool, name string) error {
 	switch _, inLibrary := librarySkill(inv.dirs.Library, name); {
 	case held && rec.Kind != lineage.KindFork:
 		return fail(exitRefused, sanitised(name)+" is not a skill of the hub, so it has no history of its own",

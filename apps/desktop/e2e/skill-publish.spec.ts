@@ -6,10 +6,8 @@ import type { Locator, Page } from "@playwright/test";
 import type { PublishOutcome, Source } from "#/cli/events.gen.ts";
 
 import {
-  diffs,
-  fileReads,
-  inventory,
   inventoryWith,
+  showReads,
   sources,
   sourcesWithoutHub,
 } from "./fixtures/publish.ts";
@@ -27,19 +25,11 @@ const isLaunchOrLoad = (line: string[]) =>
     (known) => known.join(" ") === line.join(" ")
   );
 
-/** The reads the detail pane runs on its own when a skill is selected. */
-const paneReads = new Set(["skill history", "skill files"]);
-
-/** The command lines run after the launch, but the pane's own reads of history and files. */
+/** The command lines run after the launch, but the detail pane's own read of the skill it shows. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
-    (l) => !(isLaunchOrLoad(l) || paneReads.has(l.slice(0, 2).join(" ")))
+    (l) => !(isLaunchOrLoad(l) || l.slice(0, 2).join(" ") === "skill show")
   );
-
-/** How many times `skill diff <name>` ran. */
-const diffReads = (cli: MockCli, name: string) =>
-  cli.commands.filter((l) => l.join(" ") === `skill diff ${name} --json`)
-    .length;
 
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
@@ -57,20 +47,14 @@ const openSkill = async (
   page: Page,
   name: string,
   listed: Source[] = sources,
-  /** The skills whose `skill diff` holds its answer back. */
+  /** The skills whose read holds its answer back. */
   held: string[] = []
 ) => {
   cli.onServeStart({ events: [inventoryWith(listed)] });
-  for (const entry of inventory.library) {
-    cli.register(["skill", "history", entry.name], { events: [] });
-  }
-  for (const read of fileReads) {
-    cli.register(["skill", "files", ...read.args], { events: read.events });
-  }
-  for (const [skill, events] of Object.entries(diffs)) {
-    cli.register(["skill", "diff", skill], {
-      events,
-      ...(held.includes(skill) ? { holdAfter: 0 } : {}),
+  for (const read of showReads) {
+    cli.register(["skill", "show", ...read.args], {
+      events: read.events,
+      ...(held.includes(read.args[0] ?? "") ? { holdAfter: 0 } : {}),
     });
   }
   await page.goto(`/#/skills/${name}`);
@@ -157,7 +141,6 @@ test.describe("banners", () => {
     await expect(
       pane(page, "review").getByRole("region", { name: "Files" })
     ).toContainText("edited");
-    expect(diffReads(cli, "review")).toBe(1);
   });
 
   test("an edited skill of a source forks from the action row, whose Fork runs skill fork <name>", async ({
@@ -181,7 +164,7 @@ test.describe("banners", () => {
     expect(later(cli).at(-1)).toEqual(["skill", "fork", "review", "--json"]);
   });
 
-  test("an edited skill of a read-only source: Edited locally, with the count from skill diff", async ({
+  test("an edited skill of a read-only source: Edited locally, with the count of its edits", async ({
     cli,
     page,
   }) => {
@@ -193,7 +176,7 @@ test.describe("banners", () => {
     );
   });
 
-  test("an edited skill of a read-only source, before skill diff answers: Updates keep your edits", async ({
+  test("an edited skill of a read-only source, before its read answers: Updates keep your edits", async ({
     cli,
     page,
   }) => {
@@ -205,7 +188,7 @@ test.describe("banners", () => {
 });
 
 test.describe("the Publish dialog", () => {
-  test("reads the changed files when it opens; Publish with the summary it starts with runs skill publish <name>", async ({
+  test("opens with the changed files the pane read; Publish with the summary it starts with runs skill publish <name>", async ({
     cli,
     page,
   }) => {
@@ -213,9 +196,7 @@ test.describe("the Publish dialog", () => {
     await expect(
       pane(page, "changelog").getByRole("region", { name: "Files" })
     ).toContainText("edited");
-    expect(diffReads(cli, "changelog")).toBe(1);
     const shown = await openDialog(page, "changelog");
-    expect(diffReads(cli, "changelog")).toBe(2);
     await expect(shown).toContainText(
       "The changelog skill will be published to your hub."
     );
@@ -236,11 +217,8 @@ test.describe("the Publish dialog", () => {
       toasts(page).getByText("Published changelog skill")
     ).toBeVisible();
     await expect(shown).toBeHidden();
-    expect(later(cli)).toEqual([
-      ["skill", "diff", "changelog", "--json"],
-      ["skill", "diff", "changelog", "--json"],
-      ["skill", "publish", "changelog", "--json"],
-    ]);
+    // The dialog read nothing: the pane's read of the skill held its files.
+    expect(later(cli)).toEqual([["skill", "publish", "changelog", "--json"]]);
   });
 
   test("Enter publishes, with the message typed", async ({ cli, page }) => {
@@ -343,7 +321,6 @@ test.describe("the Publish dialog", () => {
     );
     await shown.getByRole("button", { name: "Publish" }).click();
     await expect(toasts(page).getByText("Published draft skill")).toBeVisible();
-    expect(diffReads(cli, "draft")).toBe(0);
     expect(later(cli)).toEqual([["skill", "publish", "draft", "--json"]]);
   });
 

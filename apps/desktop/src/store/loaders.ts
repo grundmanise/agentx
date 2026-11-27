@@ -6,8 +6,6 @@
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
   CliEvent,
-  DiffEvent,
-  HistoryEvent,
   InstallableSkillEvent,
   SkillFileEvent,
   SourceSkillEvent,
@@ -17,7 +15,7 @@ import { cachedRead, keepRead } from "#/store/read-cache.ts";
 import { agentx, onFinished } from "#/store/runner.ts";
 import type { CommandOptions, Finished } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
-import type { AppState, FilesRead } from "#/store/store.ts";
+import type { AppState, SkillRead } from "#/store/store.ts";
 
 /** The URL of the hub, as the inventory lists the sources; undefined when none is set. */
 const hubUrl = () =>
@@ -27,7 +25,7 @@ const hubUrl = () =>
  * Whether a skill's version names its content: it starts with the content hash. A read of a
  * version without one is not kept for the next launch, since it names no content.
  */
-const hashed = (version: string) => !version.startsWith(":");
+const hashed = (version: string) => version !== "" && !version.startsWith(":");
 
 /**
  * Runs a command once the startup checks pass. A screen that shows the kept inventory under the
@@ -190,146 +188,87 @@ export const loadAdoption = async ({ afterWrite = false } = {}) => {
   await adoptionRun;
 };
 
-// The version of each skill whose history was read, or is being read: name → version.
-const historyVersions = new Map<string, string>();
+// The version of each skill that was read, or is being read: row key → version.
+const skillVersions = new Map<string, string>();
 
-/**
- * Loads the history of a hub skill: `skill history <name>`, a read. `version` names
- * what the history is of, such as the skill's content and state from the inventory: the same
- * version is read once, however often the skill is selected, and a change to it reads again.
- */
-export const loadHistory = async (name: string, version: string) => {
-  if (historyVersions.get(name) === version) {
-    return;
-  }
-  historyVersions.set(name, version);
-  // The entries of the version before, if any, are not this version's: they go first.
-  useAppStore.setState((s) => {
-    const { [name]: previous, ...rest } = s.histories;
-    return previous === undefined || previous.version === version
-      ? s
-      : { histories: rest };
-  });
-  // A history kept from an earlier launch for this version shows while `skill history` runs again:
-  // the version names the skill's content and state, not each commit, such as an amended message.
-  const kept = hashed(version)
-    ? await cachedRead<HistoryEvent[]>("history", name, version)
-    : undefined;
-  if (historyVersions.get(name) !== version) {
-    return;
-  }
-  if (kept !== undefined) {
-    useAppStore.setState((s) => ({
-      histories: { ...s.histories, [name]: { entries: kept, version } },
-    }));
-  }
-  const outcome = await runWhenReady(["skill", "history", name], {
-    label: `history ${name}`,
-    sideEffect: false,
-  });
-  if (historyVersions.get(name) !== version) {
-    return;
-  }
-  if (outcome.exitCode === 0) {
-    const entries = outcome.events.filter((e) => e.type === "history");
-    useAppStore.setState((s) => ({
-      histories: { ...s.histories, [name]: { entries, version } },
-    }));
-    if (hashed(version)) {
-      void keepRead("history", name, version, entries);
-    }
-  } else {
-    // A failed read is kept as such, unless a kept history shows, and tried again the next time
-    // the skill is selected.
-    if (kept === undefined) {
-      useAppStore.setState((s) => ({
-        histories: { ...s.histories, [name]: { failed: true, version } },
-      }));
-    }
-    historyVersions.delete(name);
-  }
-};
-
-// The version of each skill whose files were read, or are being read: row key → version.
-const fileVersions = new Map<string, string>();
-
-/** The reads that show a skill's files: `skill files` and, for a modified skill, `skill diff`. */
-export interface FilesRequest {
-  /** The arguments after `skill files`: the skill's name, as the CLI looks it up, and its flags. */
-  args: string[];
-  /** The skill whose unpublished edits `skill diff` reads; absent when the skill is not modified. */
-  diff?: string;
-}
-
-/**
- * Loads the files of the skill `key` names: `skill files`, and `skill diff <name>` for a modified
- * skill, both reads, run at once. `version` names what the files are of, as for `loadHistory`:
- * the same version is read once, however often the skill is selected, and a change reads again.
- */
-export const loadFiles = async (
-  key: string,
-  request: FilesRequest,
-  version: string
-) => {
-  if (fileVersions.get(key) === version) {
-    return;
-  }
-  fileVersions.set(key, version);
-  useAppStore.setState((s) => {
-    const { [key]: previous, ...rest } = s.files;
-    return previous === undefined || previous.version === version
-      ? s
-      : { files: rest };
-  });
-  // The files kept from an earlier launch for this version are this version's.
-  const kept = hashed(version)
-    ? await cachedRead<FilesRead>("files", key, version)
-    : undefined;
-  if (fileVersions.get(key) !== version) {
-    return;
-  }
-  if (kept !== undefined) {
-    useAppStore.setState((s) => ({ files: { ...s.files, [key]: kept } }));
-    return;
-  }
-  const [files, diff] = await Promise.all([
-    runWhenReady(["skill", "files", ...request.args], {
-      label: `files ${key}`,
-      sideEffect: false,
-    }),
-    request.diff === undefined
-      ? undefined
-      : runWhenReady(["skill", "diff", request.diff], {
-          label: `diff ${request.diff}`,
-          sideEffect: false,
-        }),
-  ]);
-  if (fileVersions.get(key) !== version) {
-    return;
-  }
-  if (files.exitCode !== 0) {
-    useAppStore.setState((s) => ({
-      files: { ...s.files, [key]: { failed: true, version } },
-    }));
-    fileVersions.delete(key);
-    return;
-  }
-  const read: FilesRead = {
-    files: files.events.filter((e) => e.type === "skill_file"),
+/** What `skill show` emitted, as the store keeps it for `version`. */
+const skillReadOf = (events: CliEvent[], version: string): SkillRead => {
+  const diffs = events.filter((e) => e.type === "diff");
+  return {
+    edits: diffs.filter((d) => d.update !== true),
+    files: events.filter((e) => e.type === "skill_file"),
+    history: events.filter((e) => e.type === "history"),
+    update: diffs.filter((d) => d.update === true),
     version,
   };
-  if (diff !== undefined) {
-    if (diff.exitCode === 0) {
-      read.diffs = diff.events.filter((e) => e.type === "diff");
-    } else {
-      // The files are shown without their edits, and both are read again on the next selection.
-      read.diffFailed = true;
-      fileVersions.delete(key);
-    }
+};
+
+/**
+ * Loads all the detail pane shows of a skill beyond the inventory, in one read: `skill show`,
+ * whose events are the skill's files, its unpublished edits, what its update changes and its
+ * history. `key` is the row's key and `args` the arguments after `skill show`: the skill's name,
+ * as the CLI looks it up, and its flags. `version` names what the read is of, the skill's content
+ * and state from the inventory: the same version is read once, however often the skill is
+ * selected, and a change to it reads again. The read of the version before stays in the store
+ * until this one replaces it, in one write, so every section that shows it changes at once. A
+ * failed read is kept as such, with the CLI's message, and tried again the next time the skill is
+ * selected.
+ */
+export const loadSkill = async (
+  key: string,
+  args: readonly string[],
+  version: string
+) => {
+  if (skillVersions.get(key) === version) {
+    return;
   }
-  useAppStore.setState((s) => ({ files: { ...s.files, [key]: read } }));
-  if (hashed(version) && read.diffFailed !== true) {
-    void keepRead("files", key, version, read);
+  skillVersions.set(key, version);
+  // A read kept from an earlier launch for this version shows while `skill show` runs again: the
+  // version names the skill's content and state, not each commit, such as an amended message.
+  const kept = hashed(version)
+    ? await cachedRead<SkillRead>("skill", key, version)
+    : undefined;
+  if (skillVersions.get(key) !== version) {
+    return;
+  }
+  if (kept !== undefined) {
+    useAppStore.setState((s) => ({
+      skillReads: { ...s.skillReads, [key]: kept },
+    }));
+  }
+  const outcome = await runWhenReady(["skill", "show", ...args], {
+    label: `show ${key}`,
+    sideEffect: false,
+  });
+  if (skillVersions.get(key) !== version) {
+    return;
+  }
+  if (outcome.exitCode !== 0) {
+    skillVersions.delete(key);
+    // A kept read stays: it is this version's.
+    if (kept === undefined) {
+      const error = outcome.events.find((e) => e.type === "error");
+      const problem = {
+        message: error?.message ?? "agentx could not read the skill",
+      };
+      useAppStore.setState((s) => ({
+        skillReads: {
+          ...s.skillReads,
+          [key]: { failed: true, problem, version },
+        },
+      }));
+    }
+    return;
+  }
+  const read = skillReadOf(outcome.events, version);
+  // A read that says what the kept one says changes nothing on the screen, and is not written.
+  if (kept === undefined || JSON.stringify(kept) !== JSON.stringify(read)) {
+    useAppStore.setState((s) => ({
+      skillReads: { ...s.skillReads, [key]: read },
+    }));
+    if (hashed(version)) {
+      void keepRead("skill", key, version, read);
+    }
   }
 };
 
@@ -404,74 +343,6 @@ export const loadSkillMd = async (key: string, request: SkillMdRequest) => {
   if (request.tree !== "") {
     void keepRead("skill-md", key, version, file);
   }
-};
-
-// The versions of each update whose changes were read, or are being read: name → updateKey.
-const updateDiffCandidates = new Map<string, string>();
-
-/** The label of the read of what the update of `name` changes, for `usePending`. */
-export const updateDiffLabel = (name: string) => `update diff ${name}`;
-
-/**
- * Loads what the update of `name` changes: `skill diff <name> --update`, what `skill update <name>`
- * would apply, for a hub skill what the hub holds, else its upstream's update. `candidate` names
- * the versions the inventory offers, the base among them (`updateKey`): the same update is read
- * once, however often its changes are shown, and one of other versions reads again. A failed read
- * is kept with the CLI's message, and tried again the next time the changes are shown.
- */
-export const loadUpdateDiff = async (name: string, candidate: string) => {
-  if (updateDiffCandidates.get(name) === candidate) {
-    return;
-  }
-  updateDiffCandidates.set(name, candidate);
-  useAppStore.setState((s) => {
-    const { [name]: previous, ...rest } = s.updateDiffs;
-    return previous === undefined || previous.candidate === candidate
-      ? s
-      : { updateDiffs: rest };
-  });
-  // The changes kept from an earlier launch of these versions are this update's.
-  const kept = await cachedRead<DiffEvent[]>("update-diff", name, candidate);
-  if (updateDiffCandidates.get(name) !== candidate) {
-    return;
-  }
-  if (kept !== undefined) {
-    useAppStore.setState((s) => ({
-      updateDiffs: { ...s.updateDiffs, [name]: { candidate, diffs: kept } },
-    }));
-    return;
-  }
-  const outcome = await runWhenReady(["skill", "diff", name, "--update"], {
-    label: updateDiffLabel(name),
-    ownFailure: true,
-    sideEffect: false,
-  });
-  if (updateDiffCandidates.get(name) !== candidate) {
-    return;
-  }
-  if (outcome.exitCode === 0) {
-    const diffs = outcome.events.filter((e) => e.type === "diff");
-    useAppStore.setState((s) => ({
-      updateDiffs: { ...s.updateDiffs, [name]: { candidate, diffs } },
-    }));
-    void keepRead("update-diff", name, candidate, diffs);
-    return;
-  }
-  const error = outcome.events.find((e) => e.type === "error");
-  const problem =
-    error === undefined
-      ? { message: "agentx could not read the changes" }
-      : {
-          message: error.message,
-          ...(error.hint === undefined ? {} : { hint: error.hint }),
-        };
-  useAppStore.setState((s) => ({
-    updateDiffs: {
-      ...s.updateDiffs,
-      [name]: { candidate, failed: true, problem },
-    },
-  }));
-  updateDiffCandidates.delete(name);
 };
 
 /**

@@ -449,6 +449,7 @@ export interface DiffEvent {
   path: string;
   status: FileStatus;
   patch: string;
+  update?: boolean;
   step?: DiffStep;
 }
 

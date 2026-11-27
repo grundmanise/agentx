@@ -326,7 +326,7 @@ test("the name of the skill that holds a Name taken card's name opens it in Skil
     events: [skillMd("xlsx", "# xlsx\n")],
   });
   await row(page, "xlsx").click();
-  cli.register(["skill", "files", "xlsx"], { events: filesOf("xlsx") });
+  cli.register(["skill", "show", "xlsx"], { events: filesOf("xlsx") });
   await opened(page, "xlsx")
     .getByRole("link", { exact: true, name: "xlsx" })
     .click();

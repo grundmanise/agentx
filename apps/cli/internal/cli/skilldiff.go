@@ -67,11 +67,12 @@ type diffEvent struct {
 	Path   string `json:"path"`
 	Status string `json:"status"` // added, modified or deleted
 	Patch  string `json:"patch"`
-	Step   string `json:"step,omitempty"` // with --update, the update of a fork it is: hub or upstream; absent otherwise
+	Update bool   `json:"update,omitempty"` // true on a diff of what an update would apply; absent on a diff of edits
+	Step   string `json:"step,omitempty"`   // the update of a fork it is: hub or upstream; absent otherwise
 }
 
-// The updates of a fork a diff of skill diff --update can be, see
-// forkDiffUpdate: one at a time, the hub step first.
+// The updates of a fork a diff of an update can be, see forkDiffUpdate: one
+// at a time, the hub step first.
 const (
 	diffStepHub      = "hub"      // the hub step: what another machine published
 	diffStepUpstream = "upstream" // the merge of the update from upstream
@@ -109,6 +110,13 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 	if err != nil {
 		return err
 	}
+	return inv.diffOf(ctx, gitDir, rec, held, name, commit)
+}
+
+// diffOf is skillDiff of the skill called name, rec being the branch the
+// store at gitDir holds for it and held whether it holds one, see
+// hubRecord.
+func (inv *invocation) diffOf(ctx context.Context, gitDir string, rec lineage.Record, held bool, name, commit string) error {
 	if held && rec.Kind == lineage.KindFork {
 		return inv.forkDiff(ctx, gitDir, rec, commit)
 	}
@@ -173,6 +181,13 @@ func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	return inv.diffUpdateOf(ctx, gitDir, rec, held, name)
+}
+
+// diffUpdateOf is skillDiffUpdate of the library skill called name, rec
+// being the branch the store at gitDir holds for it and held whether it
+// holds one, see hubRecord.
+func (inv *invocation) diffUpdateOf(ctx context.Context, gitDir string, rec lineage.Record, held bool, name string) error {
 	if held && rec.Kind == lineage.KindFork {
 		return inv.forkDiffUpdate(ctx, gitDir, rec)
 	}
@@ -227,7 +242,7 @@ func (inv *invocation) forkDiffUpdate(ctx context.Context, gitDir string, rec li
 			return storeFailure(err)
 		}
 		at := " at " + short(tip)
-		subject := diffSubject{plain: "what the hub holds of " + name + at, painted: "what the hub holds of " + inv.out.paint(heading, sanitised(name)) + at}
+		subject := diffSubject{plain: "what the hub holds of " + name + at, painted: "what the hub holds of " + inv.out.paint(heading, sanitised(name)) + at, update: true}
 		inv.reportDiff(subject, name, diffStepHub, "the version both share at "+short(base), files, 0)
 		return nil
 	}
@@ -293,15 +308,17 @@ func (inv *invocation) hubAheadOf(ctx context.Context, gitDir string, rec lineag
 // the base version rec, changes in it, as the diff of step.
 func (inv *invocation) reportUpdateDiff(name, step string, rec, c lineage.Record, files []fileDiff) {
 	at := " at " + short(c.Import.Commit)
-	subject := diffSubject{plain: "the update of " + name + at, painted: "the update of " + inv.out.paint(heading, sanitised(name)) + at}
+	subject := diffSubject{plain: "the update of " + name + at, painted: "the update of " + inv.out.paint(heading, sanitised(name)) + at, update: true}
 	inv.reportDiff(subject, name, step, "its base version at "+short(rec.Import.Commit), files, 0)
 }
 
 // diffSubject is what a diff's line says was compared with a base version:
 // the skill's library directory, named by the skill, or its update. plain
-// is the words the result carries, painted the line stdout prints.
+// is the words the result carries, painted the line stdout prints, and
+// update whether it is an update, which its diff events say.
 type diffSubject struct {
 	plain, painted string
+	update         bool
 }
 
 // reportDiff emits one diff event per file of the skill called name and
@@ -316,7 +333,7 @@ type diffSubject struct {
 func (inv *invocation) reportDiff(subject diffSubject, name, step, against string, files []fileDiff, unrecordable int) {
 	out := inv.out
 	for _, f := range files {
-		out.emit(diffEvent{event: newEvent("diff"), Name: name, Path: f.path, Status: f.status, Patch: f.patch, Step: step})
+		out.emit(diffEvent{event: newEvent("diff"), Name: name, Path: f.path, Status: f.status, Patch: f.patch, Update: subject.update, Step: step})
 	}
 	var in, painted string // what the line says it differs in, bare and painted
 	switch {

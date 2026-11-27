@@ -28,11 +28,9 @@ const openSkill = async (
   cli.onServeStart({ events: [commitHelperForked] });
   cli.register(["skill", "import"], { events: adoption });
   for (const n of ["commit-helper", "my-commit-helper", "release-notes"]) {
-    cli.register(["skill", "history", n], { events: [] });
-    cli.register(["skill", "files", n], { events: filesOf(n) });
-    cli.register(["skill", "diff", n], { events: [] });
+    cli.register(["skill", "show", n], { events: filesOf(n) });
   }
-  cli.register(["skill", "files", "acme-tools:commit-helper"], {
+  cli.register(["skill", "show", "acme-tools:commit-helper"], {
     events: filesOf("commit-helper"),
   });
   await page.goto(`/#/skills/${encodeURIComponent(key)}`);
