@@ -300,7 +300,9 @@ export interface Install {
 
 export interface Adoptable {
   tool: AdoptionTool;
+  source?: string;
   skills: string[];
+  managed?: string[];
   refused?: RefusedAdoption[];
 }
 
@@ -345,6 +347,8 @@ export interface Occurrence {
 export interface RefusedAdoption {
   name: string;
   reason: AdoptionRefusal;
+  path?: string;
+  link?: string;
 }
 
 export interface ServerVersion {

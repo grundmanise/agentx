@@ -166,7 +166,7 @@ test.describe("Import skills in the Hub card of Settings", () => {
     await expect(refused(open).getByRole("listitem")).toHaveCount(0);
     await fold.click();
     await expect(refused(open).getByRole("listitem")).toHaveText([
-      "Can't be imported: legacyIt's a link, so it can't be imported.",
+      "Can't be imported: legacyA symlink to /home/me/work/legacy. To import it, move that folder to /home/me/.agents/skills/legacy.",
     ]);
     await open.getByRole("button", { name: "Cancel" }).click();
     await expect(open).toHaveCount(0);

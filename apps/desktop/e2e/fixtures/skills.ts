@@ -263,7 +263,13 @@ export const plugins: Plugin[] = [
 ];
 
 /** What `skill import` can adopt: the unmanaged library skill the Skills CLI installed. */
-export const adoptable: Adoptable[] = [{ skills: ["scratch"], tool: "vercel" }];
+export const adoptable: Adoptable[] = [
+  {
+    skills: ["scratch"],
+    source: "https://github.com/vercel/skills",
+    tool: "vercel",
+  },
+];
 
 /** The serve child's first inventory on this machine. */
 export const inventory = {

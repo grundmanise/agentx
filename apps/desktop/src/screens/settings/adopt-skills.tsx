@@ -11,12 +11,12 @@ import type { ToolArg } from "#/screens/skills/adopt.ts";
 import { useAppStore } from "#/store/store.ts";
 
 export const AdoptSkillsRow = () => {
-  const adoptable = useAppStore((s) => s.inventory?.adoptable);
+  const inventory = useAppStore((s) => s.inventory);
   const busy = useAdoptRun((s) => s.run !== undefined);
   // The tool whose skills the dialog adopts. It stays while the dialog closes.
   const [adopting, setAdopting] = useState<ToolArg>();
   const [open, setOpen] = useState(false);
-  const tools = toolsToAdopt(adoptable);
+  const tools = toolsToAdopt(inventory);
   return (
     <SettingsRow
       name="Import skills"

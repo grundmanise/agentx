@@ -592,7 +592,7 @@ The event:
 | `skills` | array | the skill nodes, sorted by `physical_id` |
 | `library` | array | one object per skill directory of the library, sorted by `name`: the [`library_skill`](#event-types) event `agentx skill list` emits for it, every field and nothing else, without `type` and `schema_version`, so its `kind` is `managed` or `unmanaged` and where a skill is published to and came from are its `source` and `upstream` fields; `[]` when the library holds no skill, or when git cannot read the store, which a warning then says (see below). A managed skill whose import branch the store holds but whose library directory is gone is not listed, and so has no `state` and no `drift`: it is named in `warnings` instead, one per skill, as `agentx skill list` names it (see **Listing** under [Skills](#skills)) |
 | `installs` | array | when each skill last entered the library of this machine and when it last left it, as `installs.json` in agentx home holds them (see below); `[]` when the file holds none, and when it cannot be read, which a warning then says |
-| `adoptable` | array | the skills another tool installed on this machine that agentx does not manage, one object per tool that has any (see below); `[]` when no tool recorded one, when a record file cannot be read, which a warning then says, and when git cannot read the store, as `library` |
+| `adoptable` | array | the skills another tool installed on this machine, one object per tool and source its records name (see below); `[]` when no tool recorded one, when a record file cannot be read, which a warning then says, and when git cannot read the store, as `library` |
 | `mcp_servers` | array | the MCP server nodes, sorted by `physical_id` |
 | `plugins` | array | the plugin nodes, sorted by `physical_id` |
 | `edges` | array | `{"from", "to"}` pairs of node ids, sorted by `from` then `to`: the machine id to each configuration; each configuration to each skill it sees, each server it declares and each plugin it has installed; each plugin to each skill and server it provides |
@@ -609,26 +609,37 @@ An install is one skill by its logical asset, as the commands that add and remov
 | `added` | string | when it last entered the library, RFC 3339 in UTC; a later add overwrites it; absent when this machine never recorded one |
 | `removed` | string | when it last left the library, RFC 3339 in UTC; an add leaves it as it was; absent when this machine never recorded one |
 
-An adoptable entry is one tool and the skills its install records name that agentx does not manage: the records [`agentx skill import`](#importing-skills) reads, judged as its preview judges them (see **Candidates** there), under the lock the scan holds and against the lineage and the settings the scan read, so an inventory never lists a skill here that its `library` lists as managed. A record of a skill agentx manages is in neither list, and so is one whose directory is gone. The Vercel skills CLI comes first, then Skillshare, and a tool with nothing in either list has no entry. A scan reads the record files and looks at the directory of each record; it runs no git for them and fetches nothing. A record file that cannot be read is one warning, `<the problem>; the skills another tool installed are not listed`, and the scan lists none for either tool. The entries are facts only: the file a record came from, the source it names and the reason in words are what the `adoption` events of `agentx skill import` carry, and matching a name to a library entry or to a skill node is the reader's.
+An adoptable entry is one tool, one source and the skills that tool's install records say it installed from that source: the records [`agentx skill import`](#importing-skills) reads, judged as its preview judges them (see **Candidates** there), under the lock the scan holds and against the lineage and the settings the scan read, so an inventory never lists a skill under `skills` that its `library` lists as managed. The records that name no source agentx can install from share one entry without `source`. A record whose directory is gone is in no entry. The Vercel skills CLI comes first, then Skillshare, each tool's entries sorted by `source`, the one without it first. A scan reads the record files and looks at the directory of each record; it runs no git for them and fetches nothing. A record file that cannot be read is one warning, `<the problem>; the skills another tool installed are not listed`, and the scan lists none for either tool. What a preview warns of in one record, a name it leaves out or credentials it dropped from a URL, a scan does not say. The entries are facts only: the file a record came from, the skill's directory in the source and the reason in words are what the `adoption` events of `agentx skill import` carry, and matching a name to a library entry or to a skill node is the reader's.
 
 | Field | Type | Meaning |
 |---|---|---|
 | `tool` | string | the tool whose records name the skills: `vercel` for the Vercel skills CLI, or `skillshare` |
-| `skills` | array of strings | the names of the skills an import can adopt, sorted |
-| `refused` | array | the skills an import cannot adopt, sorted by `name`, each an object with `name` and `reason`; absent when there is none |
+| `source` | string | the canonical URL of the source the records name; absent for the records that name none agentx can install from |
+| `skills` | array of strings | the names of the skills an import can adopt, sorted; `[]` when there is none |
+| `managed` | array of strings | the names of the skills agentx manages already, the `managed` state of a preview, sorted; absent when there is none |
+| `refused` | array | the skills an import cannot adopt, sorted by `name` (see below); absent when there is none. A refused record names no source agentx can install from |
 
-`reason` is a code for what is in the way, one of the list below. The list will gain more, and a reader treats a code it does not know as a skill that cannot be imported.
+A refused skill:
 
-| `reason` | What is in the way |
-|---|---|
-| `name_taken` | agentx manages a skill of that name, whose library directory is missing |
-| `symlink` | this machine holds the skill as a symlink and no directory |
-| `file` | the library holds a file under the name |
-| `no_skill_file` | the library directory holds no `SKILL.md` |
-| `tracked` | it is a repository Skillshare tracks as a whole |
-| `unplaced` | only the tool's own folder holds it, where no agent client looks for skills |
-| `invalid_name` | its directory has a name agentx cannot give a skill |
-| `repository` | its directory is a Git repository of its own |
+| Field | Type | Meaning |
+|---|---|---|
+| `name` | string | the skill |
+| `reason` | string | what is in the way, as a code of the list below |
+| `path` | string | the path the reason is about, absolute, when it is not the skill's library path, `<library>/<name>`; absent otherwise |
+| `link` | string | for `symlink`, the symlink, when it is not at the skill's library path; absent otherwise |
+
+The list of codes will gain more, and a reader treats a code it does not know as a skill that cannot be imported. Each is one row of the preview of `agentx skill import`, which says it in words with the same paths.
+
+| `reason` | What is in the way | `path` |
+|---|---|---|
+| `name_taken` | agentx manages a skill of that name, whose library directory is missing | absent |
+| `symlink` | this machine holds the skill as a symlink and no directory, in the library or, when the library holds nothing under the name, in an agent client's own skills directory, which `link` then names | the directory the symlink leads to |
+| `file` | the library holds a file under the name | absent |
+| `no_skill_file` | the library directory holds no `SKILL.md` | absent |
+| `tracked` | it is a repository Skillshare tracks as a whole | absent |
+| `unplaced` | only the tool's own folder holds it, where no agent client looks for skills | that folder |
+| `invalid_name` | its directory has a name agentx cannot give a skill | that directory |
+| `repository` | its directory is a Git repository of its own | its `.git` |
 
 A configuration:
 

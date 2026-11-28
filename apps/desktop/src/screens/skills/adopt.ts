@@ -10,16 +10,16 @@ import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
-  Adoptable,
   AdoptionEvent,
   AdoptionTool,
   CliEvent,
-  RefusedAdoption,
+  InventoryEvent,
 } from "#/cli/events.gen.ts";
 import { againRule, doctorRule, rewriteHint } from "#/lib/app-hint.ts";
 import { plural } from "#/lib/plural.ts";
 import { refusalText } from "#/screens/skills/placements.ts";
-import { toolName } from "#/screens/skills/projection.ts";
+import { refusalOf, sorted, toolName } from "#/screens/skills/projection.ts";
+import type { Refusal } from "#/screens/skills/projection.ts";
 import { cancelCommand } from "#/store/runner.ts";
 import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled } from "#/store/settle.ts";
@@ -46,21 +46,36 @@ export interface ToolRecords {
   /** The tool as the product calls it: "Skills CLI", "Skillshare". */
   name: string;
   candidates: string[];
-  refused: RefusedAdoption[];
+  refused: Refusal[];
 }
 
-/** The tools with a skill to adopt, from the inventory's `adoptable`, in the app's order. */
-export const toolsToAdopt = (adoptable: readonly Adoptable[] = []) =>
+/** In the order of the CLI's lists: by code unit. */
+const byName = (a: string, b: string) => (a < b ? -1 : Number(a > b));
+
+/**
+ * The tools with a skill to adopt, from the inventory's `adoptable`, in the app's order, each
+ * with its skills of every source in name order.
+ */
+export const toolsToAdopt = (inventory: InventoryEvent | undefined) =>
   TOOLS.flatMap((tool): ToolRecords[] => {
-    const records = adoptable.find((a) => a.tool === tool.tool);
-    return records === undefined || records.skills.length === 0
+    const entries = (inventory?.adoptable ?? []).filter(
+      (a) => a.tool === tool.tool
+    );
+    const candidates = sorted(
+      entries.flatMap((a) => a.skills),
+      byName
+    );
+    return inventory === undefined || candidates.length === 0
       ? []
       : [
           {
             arg: tool.arg,
-            candidates: records.skills,
+            candidates,
             name: toolName(tool.tool),
-            refused: records.refused ?? [],
+            refused: sorted(
+              entries.flatMap((a) => a.refused ?? []),
+              (a, b) => byName(a.name, b.name)
+            ).map((r) => refusalOf(r, inventory.machine.library)),
           },
         ];
   });
@@ -101,7 +116,7 @@ export const rowsOf = (tools: readonly ToolRecords[]): AdoptRow[] =>
     })),
     ...t.refused.map((r): AdoptRow => ({
       name: r.name,
-      reason: refusalText(r.reason),
+      reason: refusalText(r),
       status: "left-out",
       tool: t.arg,
     })),

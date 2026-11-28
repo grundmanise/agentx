@@ -4,7 +4,6 @@
 // every control reads a placement the same way. Nothing here predicts: a chip's state comes from
 // the inventory, and a count from the CLI's result.
 import type {
-  AdoptionRefusal,
   CliEvent,
   Configuration,
   LibraryPlacement,
@@ -13,7 +12,7 @@ import type {
 import type { AgentChipState } from "#/components/agent-chip.tsx";
 import { plural } from "#/lib/plural.ts";
 import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
-import type { SkillRow } from "#/screens/skills/projection.ts";
+import type { Refusal, SkillRow } from "#/screens/skills/projection.ts";
 
 /**
  * Whether a configuration sees the skill: through its placement, displaced when the placement's
@@ -59,32 +58,41 @@ export type Importability =
   | { args: string[] }
   | { why: string; inTheWay?: string };
 
-/** Why `skill import` cannot take a skill another tool installed, from the inventory's reason. */
-export const refusalText = (reason: AdoptionRefusal): string => {
+/**
+ * Why `skill import` cannot take a skill another tool installed, and what to do about it, from
+ * the reason the inventory lists and the paths it is about. A reason the app does not know says
+ * only that.
+ */
+export const refusalText = ({
+  libraryPath,
+  link,
+  path = "",
+  reason,
+}: Refusal): string => {
   switch (reason) {
     case "name_taken": {
-      return "agentx already manages a skill with this name, and its folder is missing. Remove that skill first";
+      return `agentx already manages a skill of this name, whose folder ${libraryPath} is missing. To import this one, remove that skill first`;
     }
     case "symlink": {
-      return "It's a link, so it can't be imported";
+      return `A symlink to ${path}. To import it, move that folder to ${link ?? libraryPath}`;
     }
     case "file": {
-      return "It's a file, and a skill is a folder, so it can't be imported";
+      return `A file, and a skill is a folder. To import it, put the skill's folder at ${libraryPath}`;
     }
     case "no_skill_file": {
-      return "Its folder has no SKILL.md file, so it can't be imported";
+      return `A folder with no SKILL.md file. To import it, add a SKILL.md to ${libraryPath}`;
     }
     case "tracked": {
-      return "It's a whole repository that Skillshare tracks. Add that repository as a source to install its skills";
+      return "A whole repository that Skillshare tracks. Add that repository as a source, then install its skills";
     }
     case "unplaced": {
-      return "It's in no skills folder an agent client reads, so it can't be imported";
+      return `Only in ${path}, where no agent looks for skills. To import it, move that folder to ${libraryPath}`;
     }
     case "invalid_name": {
-      return "Its folder's name is not a valid skill name. Rename the folder first";
+      return `Not a valid skill name. To import it, rename ${path}`;
     }
     case "repository": {
-      return "Its folder is a Git repository of its own, so it can't be imported";
+      return `A Git repository of its own. To import it, move ${path} out of the folder`;
     }
     default: {
       return "It can't be imported";
@@ -100,8 +108,13 @@ export const importOf = (row: SkillRow): Importability | undefined => {
   if (recorded?.refusal !== undefined) {
     return { why: refusalText(recorded.refusal) };
   }
-  if (recorded !== undefined || row.entry !== undefined) {
+  if (recorded !== undefined && recorded.managed !== true) {
     return { args: adoptLine(row.name) };
+  }
+  if (row.entry !== undefined) {
+    return recorded === undefined
+      ? { args: adoptLine(row.name) }
+      : { why: "agentx already manages it" };
   }
   const occurrence = occurrenceOf(row);
   if (occurrence === undefined) {

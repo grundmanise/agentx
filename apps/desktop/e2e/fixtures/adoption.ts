@@ -84,10 +84,13 @@ export const inventory = {
   ...skillsInventory,
   adoptable: [
     {
-      refused: [{ name: "legacy", reason: "symlink" }],
-      skills: ["scratch"],
+      refused: [
+        { name: "legacy", path: "/home/me/work/legacy", reason: "symlink" },
+      ],
+      skills: [],
       tool: "vercel",
     },
+    ...skillsInventory.adoptable,
   ],
   library: [...skillsInventory.library, ...more],
   skills: [

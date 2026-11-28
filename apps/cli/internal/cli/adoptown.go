@@ -336,22 +336,30 @@ func symlinkRefusal(name, link string) (reason string, f *failure) {
 // can install it from, cannot be adopted with its files as they are: nil
 // when this machine holds a folder of it to adopt, the library's, or,
 // where the library holds nothing under the name, one in an agent client's
-// own skills directory. code is the refusal as an inventory names it;
-// reason is the refusal as a row of a preview says it, without the skill's
-// name; the failure is how a run asked to adopt it answers. managed says an import branch holds the name, whose skill the
-// library no longer holds as a folder. It reads the machine and writes
-// nothing, as the preview that asks does; what else can refuse the
+// own skills directory. as is the refusal as an inventory lists it, its
+// code and the paths it is about; reason is the refusal as a row of a
+// preview says it, without the skill's name; the failure is how a run asked
+// to adopt it answers. managed says an import branch holds the name, whose
+// skill the library no longer holds as a folder. It reads the machine and
+// writes nothing, as the preview that asks does; what else can refuse the
 // adoption, see checkForking, is found when it runs. sites finds what the
 // agent clients' own skills directories hold under the name.
-func (inv *invocation) asItIsRefusal(rec record, managed bool, sites siteFinder) (code, reason string, f *failure) {
+func (inv *invocation) asItIsRefusal(rec record, managed bool, sites siteFinder) (as scan.RefusedAdoption, reason string, f *failure) {
 	name, libPath := rec.name, inv.libraryPath(rec.name)
 	shown, again := sanitised(name), "run '"+adoptCommand(rec.name)+"' again"
-	refused := func(code, reason, message, hint string) (string, string, *failure) {
-		return code, reason, refuse(exitRefused, message, hint).listed(reason)
+	listed := func(code, path string) scan.RefusedAdoption {
+		return scan.RefusedAdoption{Name: name, Reason: code, Path: path}
 	}
-	symlink := func(link string) (string, string, *failure) {
+	refused := func(code, reason, message, hint string) (scan.RefusedAdoption, string, *failure) {
+		return listed(code, ""), reason, refuse(exitRefused, message, hint).listed(reason)
+	}
+	symlink := func(link string) (scan.RefusedAdoption, string, *failure) {
 		reason, f := symlinkRefusal(name, link)
-		return refusedSymlink, reason, f
+		as := listed(refusedSymlink, linkedFolder(link))
+		if link != libPath {
+			as.Link = link
+		}
+		return as, reason, f
 	}
 	if managed {
 		remove := "'" + skillCommand("remove", name) + "'"
@@ -383,18 +391,18 @@ func (inv *invocation) asItIsRefusal(rec record, managed bool, sites siteFinder)
 				shown+" is a repository Skillshare tracks as a whole, with skills inside it",
 				"add the repository with 'agentx source add <url>' and install its skills with 'agentx skill add'")
 		default:
-			return refused(refusedUnplaced, "only in "+quotedPath(rec.dir)+", where no agent looks for skills. To import it, move that folder to "+quotedPath(libPath),
-				shown+" is only in "+quotedPath(rec.dir)+", where no agent looks for skills",
-				"move "+quotedPath(rec.dir)+" to "+quotedPath(libPath)+", then "+again)
+			reason := "only in " + quotedPath(rec.dir) + ", where no agent looks for skills. To import it, move that folder to " + quotedPath(libPath)
+			return listed(refusedUnplaced, rec.dir), reason, refuse(exitRefused, shown+" is only in "+quotedPath(rec.dir)+", where no agent looks for skills",
+				"move "+quotedPath(rec.dir)+" to "+quotedPath(libPath)+", then "+again).listed(reason)
 		}
 	}
 	if forkNameRefusal(name) != "" {
-		return refusedInvalidName, invalidNameRow(dir), invalidNameRefusal(name, dir)
+		return listed(refusedInvalidName, dir), invalidNameRow(dir), invalidNameRefusal(name, dir)
 	}
 	if own := ownRepo(dir); own != "" {
-		return refusedRepository, ownRepoRow(own), ownRepoRefusal(name, own)
+		return listed(refusedRepository, own), ownRepoRow(own), ownRepoRefusal(name, own)
 	}
-	return "", "", nil
+	return scan.RefusedAdoption{}, "", nil
 }
 
 // adoptSourceOf finds the unmanaged skill called name. The library comes

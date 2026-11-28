@@ -78,20 +78,36 @@ const node = (name: string): SkillNode => ({
 /** The names this fixture adds to the Skills fixture's library; scratch is there already. */
 const added = ["deck-outline", MOVED, ...skillshareNames, "legacy"];
 
+/** The records of `tool` that name `source`, with `managed` adopted. */
+const recordsOf = (
+  tool: Adoptable["tool"],
+  source: string,
+  names: string[],
+  managed: string[]
+): Adoptable => {
+  const taken = names.filter((name) => managed.includes(name));
+  return {
+    skills: names.filter((name) => !managed.includes(name)),
+    source,
+    tool,
+    ...(taken.length === 0 ? {} : { managed: taken }),
+  };
+};
+
 /**
- * What the tools' records hold that agentx does not manage, with `managed` adopted: the skills of
- * each tool to adopt, and legacy, which the library holds as a symlink.
+ * What the tools' records hold with `managed` adopted: legacy, whose record names no source and
+ * which the library holds as a symlink, then the skills of each tool, by the source they name.
  */
 const adoptableWith = (managed: string[]): Adoptable[] => [
   {
-    refused: [{ name: "legacy", reason: "symlink" }],
-    skills: skillsCliNames.filter((name) => !managed.includes(name)),
+    refused: [
+      { name: "legacy", path: "/home/me/work/legacy", reason: "symlink" },
+    ],
+    skills: [],
     tool: "vercel",
   },
-  ...[skillshareNames.filter((name) => !managed.includes(name))].flatMap(
-    (skills): Adoptable[] =>
-      skills.length === 0 ? [] : [{ skills, tool: "skillshare" }]
-  ),
+  recordsOf("vercel", VERCEL, skillsCliNames, managed),
+  recordsOf("skillshare", TEAM, skillshareNames, managed),
 ];
 
 /** The machine with `managed` adopted, each from the source of the tool that installed it. */

@@ -250,9 +250,9 @@ export const AdoptDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const adoptable = useAppStore((s) => s.inventory?.adoptable);
+  const inventory = useAppStore((s) => s.inventory);
   const run = useAdoptRun((s) => s.run);
-  const records = toolsToAdopt(adoptable).filter((t) => wanted.includes(t.arg));
+  const records = toolsToAdopt(inventory).filter((t) => wanted.includes(t.arg));
   // Once Adopt is pressed, the dialog shows the run: its tools and rows as they were then.
   const tools = run?.tools ?? summariesOf(records);
   const rows = run?.rows ?? rowsOf(records);

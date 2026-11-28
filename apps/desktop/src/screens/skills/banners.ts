@@ -215,7 +215,9 @@ const table: BannerRule[] = [
       };
     },
     when: (row) =>
-      row.recorded !== undefined && row.recorded.refusal === undefined,
+      row.recorded !== undefined &&
+      row.recorded.managed !== true &&
+      row.recorded.refusal === undefined,
   },
   {
     // An unmanaged skill no tool recorded.

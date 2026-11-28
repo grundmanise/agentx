@@ -478,7 +478,7 @@ func TestServeWatchesAToolsInstallRecords(t *testing.T) {
 	})
 	inventory = p.next("inventory")
 	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
-	if got, want := inventory["adoptable"], []any{map[string]any{"tool": toolVercel, "skills": []any{"commit"}}}; !reflect.DeepEqual(got, want) {
+	if got, want := inventory["adoptable"], []any{map[string]any{"tool": toolVercel, "source": "https://github.com/owner/repo", "skills": []any{"commit"}}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("adoptable = %v, want %v", got, want)
 	}
 	equal(t, "exit", p.close(), 0)

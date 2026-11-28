@@ -1,25 +1,19 @@
 // importOf, as a table: the `skill import` command line that takes over each unmanaged skill, or
-// why `skill import` has no way to take it.
+// why `skill import` has no way to take it. Then what a row says of the tool that recorded it.
 import { expect, test } from "@playwright/test";
 
-import type {
-  Adoptable,
-  AdoptionRefusal,
-  InventoryEvent,
-  SkillNode,
-} from "#/cli/events.gen.ts";
+import type { Adoptable, InventoryEvent, SkillNode } from "#/cli/events.gen.ts";
+import { detailsOf } from "#/screens/skills/details.ts";
 import { adoptArgs, importOf } from "#/screens/skills/placements.ts";
-import { projectRows } from "#/screens/skills/projection.ts";
+import { originOf, projectRows } from "#/screens/skills/projection.ts";
 
 import { inventory as refusedInventory } from "./fixtures/adoption.ts";
 import { inventory, linked, meetingNotes } from "./fixtures/skills.ts";
 import { thisMachine } from "./harness/cli.ts";
 
-/** What the inventory says of `name`, which the Skills CLI installed: to adopt, or refused for `reason`. */
-const recorded = (name: string, reason?: AdoptionRefusal): Adoptable[] => [
-  reason === undefined
-    ? { skills: [name], tool: "vercel" }
-    : { refused: [{ name, reason }], skills: [], tool: "vercel" },
+/** What the inventory says of the skills the Skills CLI installed: `lists` of one of its entries. */
+const recorded = (lists: Partial<Adoptable>): Adoptable[] => [
+  { skills: [], tool: "vercel", ...lists },
 ];
 
 /** A skill node with one occurrence in Cursor: `fields` say its path, kind and scope. */
@@ -98,7 +92,7 @@ const table: [
 ][] = [
   [
     "a library skill another tool recorded",
-    rowOf("scratch", recorded("scratch")),
+    rowOf("scratch", recorded({ skills: ["scratch"] })),
     ["skill", "import", "scratch"],
   ],
   [
@@ -108,8 +102,21 @@ const table: [
   ],
   [
     "a library skill whose record the CLI refuses",
-    rowOf("legacy", recorded("legacy", "symlink"), refusedInventory),
-    "It's a link",
+    rowOf(
+      "legacy",
+      recorded({
+        refused: [
+          { name: "legacy", path: "/home/me/work/legacy", reason: "symlink" },
+        ],
+      }),
+      refusedInventory
+    ),
+    "A symlink to /home/me/work/legacy",
+  ],
+  [
+    "a library skill whose record says agentx manages it",
+    rowOf("scratch", recorded({ managed: ["scratch"] })),
+    "agentx already manages it",
   ],
   [
     "a directory in a client's own skills directory",
@@ -162,5 +169,20 @@ test("importOf names the library skill in the way of a folder", () => {
   expect(importOf(rowOf("skill:h-own-pdf", [], inventory, [ownPdf]))).toEqual({
     inTheWay: "pdf",
     why: "Your library already has a skill named pdf, this folder's name. Import or remove that skill first",
+  });
+});
+
+test("a client's own folder named as a managed skill another tool recorded names that tool", () => {
+  const source = "https://github.com/acme/skills";
+  const row = rowOf(
+    "skill:h-own-pdf",
+    recorded({ managed: ["pdf"], source }),
+    inventory,
+    [ownPdf]
+  );
+  expect(originOf(row)).toBe("Skills CLI");
+  expect(detailsOf(row, inventory.configurations).at(-1)).toEqual({
+    key: "Installed by",
+    value: `Skills CLI · ${source}`,
   });
 });

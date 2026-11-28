@@ -934,7 +934,7 @@ test.describe("the detail pane", () => {
           - definition:
             - link "/home/me/.agents/skills/scratch"
           - term: Installed by
-          - definition: Skills CLI
+          - definition: Skills CLI · https://github.com/vercel/skills
     `);
   });
 

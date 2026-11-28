@@ -167,14 +167,16 @@ type LibraryEntry struct {
 	Universal       []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
 }
 
-// Adoptable is what one other tool installed on this machine that agentx
-// does not manage, as agentx skill import judges that tool's install
-// records: the skills it can adopt and the ones it cannot. A skill agentx
-// manages already is in neither list. They are facts only: matching a name
-// to a library entry or to a skill node is the reader's.
+// Adoptable is what one other tool installed on this machine from one
+// source, as agentx skill import judges that tool's install records: the
+// skills it can adopt, the ones agentx manages already and the ones it
+// cannot adopt. They are facts only: matching a name to a library entry or
+// to a skill node is the reader's.
 type Adoptable struct {
 	Tool    string            `json:"tool"`              // the tool whose records name them: vercel or skillshare
+	Source  string            `json:"source,omitempty"`  // the canonical URL of the source the records name; absent for the records that name none agentx can install from
 	Skills  []string          `json:"skills"`            // the names of the skills an import can adopt, sorted
+	Managed []string          `json:"managed,omitempty"` // the names of the skills agentx manages already, sorted
 	Refused []RefusedAdoption `json:"refused,omitempty"` // the skills an import cannot adopt, sorted by name
 }
 
@@ -182,7 +184,9 @@ type Adoptable struct {
 // import cannot adopt.
 type RefusedAdoption struct {
 	Name   string `json:"name"`
-	Reason string `json:"reason"` // what is in the way, as a code
+	Reason string `json:"reason"`         // what is in the way, as a code
+	Path   string `json:"path,omitempty"` // the path the reason is about, when it is not the skill's library path: the folder a symlink leads to, the tool's folder, the folder with the name, the .git
+	Link   string `json:"link,omitempty"` // the symlink, for one that is not at the skill's library path
 }
 
 // LibraryCandidate is the update the last update check found for a managed

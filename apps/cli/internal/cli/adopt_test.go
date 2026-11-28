@@ -685,39 +685,47 @@ func TestAsItIsRefusal(t *testing.T) {
 		rec     record
 		managed bool
 		code    string // "" for a skill adopted as it is
+		path    string // the path an inventory lists with the code
+		link    string // the symlink an inventory lists with it
 		reason  string
 	}{
 		{rec: record{name: "folder"}},
 		{rec: record{name: "client"}},
-		{rec: record{name: "linked"}, code: refusedSymlink,
+		{rec: record{name: "linked"}, code: refusedSymlink, path: filepath.Join(root, "work", "linked"),
 			reason: "a symlink to " + filepath.Join(root, "work", "linked") + ". To import it, move that folder to " + at("linked")},
-		{rec: record{name: "elsewhere"}, code: refusedSymlink,
+		{rec: record{name: "elsewhere"}, code: refusedSymlink, path: filepath.Join(root, "work", "linked"), link: filepath.Join(claude, "elsewhere"),
 			reason: "a symlink to " + filepath.Join(root, "work", "linked") + ". To import it, move that folder to " + filepath.Join(claude, "elsewhere")},
 		{rec: record{name: "file"}, code: refusedFile, reason: "a file, and a skill is a folder. To import it, put the skill's folder at " + at("file")},
 		{rec: record{name: "bare"}, code: refusedNoSkillFile, reason: "a folder with no SKILL.md file. To import it, add a SKILL.md to " + at("bare")},
-		{rec: record{name: "Bad_Name"}, code: refusedInvalidName, reason: "not a valid skill name. To import it, rename " + at("Bad_Name")},
-		{rec: record{name: "cloned"}, code: refusedRepository,
+		{rec: record{name: "Bad_Name"}, code: refusedInvalidName, path: at("Bad_Name"), reason: "not a valid skill name. To import it, rename " + at("Bad_Name")},
+		{rec: record{name: "cloned"}, code: refusedRepository, path: filepath.Join(at("cloned"), ".git"),
 			reason: "a Git repository of its own. To import it, move " + filepath.Join(at("cloned"), ".git") + " out of the folder"},
-		{rec: record{name: "apart", dir: filepath.Join(store, "apart")}, code: refusedUnplaced,
+		{rec: record{name: "apart", dir: filepath.Join(store, "apart")}, code: refusedUnplaced, path: filepath.Join(store, "apart"),
 			reason: "only in " + filepath.Join(store, "apart") + ", where no agent looks for skills. To import it, move that folder to " + at("apart")},
 		{rec: record{name: "apart", dir: filepath.Join(store, "apart"), tracked: true}, code: refusedTracked,
 			reason: "a whole repository that Skillshare tracks. Add it with 'agentx source add <url>', then install its skills"},
 		{rec: record{name: "folder"}, managed: true, code: refusedNameTaken,
 			reason: "agentx already manages a skill of this name, whose folder " + at("folder") + " is missing. To import this one, first run 'agentx skill remove folder'"},
 	} {
-		code, reason, f := inv.asItIsRefusal(tc.rec, tc.managed, inv.adoptSites)
-		if code != tc.code || reason != tc.reason || (f == nil) != (tc.reason == "") {
-			t.Errorf("%s: asItIsRefusal = %q, %q, %v, want %q, %q", tc.rec.name, code, reason, f, tc.code, tc.reason)
+		want := scan.RefusedAdoption{Reason: tc.code, Path: tc.path, Link: tc.link}
+		if tc.code != "" {
+			want.Name = tc.rec.name
+		}
+		as, reason, f := inv.asItIsRefusal(tc.rec, tc.managed, inv.adoptSites)
+		if as != want || reason != tc.reason || (f == nil) != (tc.reason == "") {
+			t.Errorf("%s: asItIsRefusal = %+v, %q, %v, want %+v, %q", tc.rec.name, as, reason, f, want, tc.reason)
 		}
 	}
 }
 
 // TestAdoptable is what an inventory says of the skills the other tools
 // installed, judged in one home with no git: a skill an import can adopt is
-// named under its tool, one it cannot with the code of what is in the way,
-// and a skill agentx manages already, or one this machine no longer holds,
-// under neither. The Vercel skills CLI comes first. A file that is no record
-// file is one warning, and nothing is listed.
+// named under its tool and the source its record names, one agentx manages
+// already too, and one an import cannot adopt with the code of what is in
+// the way and the path it is about, under its tool and no source. A skill
+// this machine no longer holds is under none. The Vercel skills CLI comes
+// first, and the records that name no source before the others. A file that
+// is no record file is one warning, and nothing is listed.
 func TestAdoptable(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -726,7 +734,7 @@ func TestAdoptable(t *testing.T) {
 	h := &harness{t: t, home: root, config: config}
 	shared := h.skillshareSkills()
 	for _, dir := range []string{
-		filepath.Join(lib, "alpha"), filepath.Join(lib, "kept"), filepath.Join(root, "work", "linked"),
+		filepath.Join(lib, "alpha"), filepath.Join(lib, "other"), filepath.Join(lib, "kept"), filepath.Join(root, "work", "linked"),
 		filepath.Join(shared, "beta"), filepath.Join(shared, "apart"),
 	} {
 		writeFile(t, mkdirs(t, dir, "SKILL.md"), skill(filepath.Base(dir), "A skill"))
@@ -745,6 +753,7 @@ func TestAdoptable(t *testing.T) {
 	github := lockEntry{Source: "owner/repo", SourceType: "github", SourceURL: "https://github.com/owner/repo.git"}
 	h.writeLock(h.lockPath(), map[string]lockEntry{
 		"alpha":  github,
+		"other":  {Source: "owner/more", SourceType: "github", SourceURL: "https://github.com/owner/more.git"},
 		"kept":   github,
 		"gone":   github,
 		"linked": {Source: "/work/linked", SourceType: "local"},
@@ -759,8 +768,15 @@ func TestAdoptable(t *testing.T) {
 
 	got := inv.adoptable(managed, home.Settings{}, warn)
 	want := []scan.Adoptable{
-		{Tool: toolVercel, Skills: []string{"alpha"}, Refused: []scan.RefusedAdoption{{Name: "linked", Reason: refusedSymlink}}},
-		{Tool: toolSkillshare, Skills: []string{"beta"}, Refused: []scan.RefusedAdoption{{Name: "apart", Reason: refusedUnplaced}}},
+		{Tool: toolVercel, Skills: []string{}, Refused: []scan.RefusedAdoption{
+			{Name: "linked", Reason: refusedSymlink, Path: filepath.Join(root, "work", "linked")},
+		}},
+		{Tool: toolVercel, Source: "https://github.com/owner/more", Skills: []string{"other"}},
+		{Tool: toolVercel, Source: "https://github.com/owner/repo", Skills: []string{"alpha"}, Managed: []string{"kept"}},
+		{Tool: toolSkillshare, Skills: []string{}, Refused: []scan.RefusedAdoption{
+			{Name: "apart", Reason: refusedUnplaced, Path: filepath.Join(shared, "apart")},
+		}},
+		{Tool: toolSkillshare, Source: "https://github.com/team/skills", Skills: []string{"beta"}},
 	}
 	if !reflect.DeepEqual(got, want) || len(warnings) > 0 {
 		t.Errorf("adoptable = %+v, warnings %q, want %+v and no warning", got, warnings, want)

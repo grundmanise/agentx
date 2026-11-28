@@ -3,8 +3,6 @@
 // it. Pure functions over the applied inventory, so that every later change to the screen reads a
 // skill the same way. Nothing here predicts: a row changes only when the inventory does.
 import type {
-  Adoptable,
-  AdoptionRefusal,
   AdoptionTool,
   Configuration,
   InventoryEvent,
@@ -13,6 +11,7 @@ import type {
   LibraryHubAhead,
   Occurrence,
   Plugin,
+  RefusedAdoption,
   SkillNode,
 } from "#/cli/events.gen.ts";
 import { formatDate } from "#/lib/dates.ts";
@@ -202,12 +201,30 @@ export const updateKey = (update: UpdateOffer) =>
   ].join(":");
 
 /**
- * What the inventory says of an unmanaged skill another tool installed (`adoptable`): the tool,
- * and what is in the way when `skill import` cannot take it.
+ * A skill `skill import` cannot adopt, as the inventory lists it, with the path the library
+ * would hold it at.
+ */
+export interface Refusal extends RefusedAdoption {
+  libraryPath: string;
+}
+
+/** A refused skill of the inventory on the machine whose library is `library`. */
+export const refusalOf = (
+  refused: RefusedAdoption,
+  library: string
+): Refusal => ({ ...refused, libraryPath: `${library}/${refused.name}` });
+
+/**
+ * What the inventory says of a skill another tool installed (`adoptable`): the tool, the source
+ * its record names when it names one, and whether `skill import` can take it.
  */
 export interface Recorded {
   tool: AdoptionTool;
-  refusal?: AdoptionRefusal;
+  source?: string;
+  /** agentx manages a skill of this name already. */
+  managed?: true;
+  /** What is in the way when `skill import` cannot take it. */
+  refusal?: Refusal;
 }
 
 /** A tool that installs skills, as the product calls it. */
@@ -225,15 +242,29 @@ export const toolName = (tool: AdoptionTool): string => {
   }
 };
 
-/** The skills the inventory lists under `adoptable`, by name. */
-const recordedOf = (adoptable: readonly Adoptable[]) => {
+/** The skills the inventory lists under `adoptable`, by name; the first entry that names one. */
+const recordedOf = ({ adoptable, machine }: InventoryEvent) => {
   const recorded = new Map<string, Recorded>();
-  for (const { refused = [], skills, tool } of adoptable) {
-    for (const name of skills) {
-      recorded.set(name, { tool });
+  const record = (name: string, of: Recorded) => {
+    if (!recorded.has(name)) {
+      recorded.set(name, of);
     }
-    for (const { name, reason } of refused) {
-      recorded.set(name, { refusal: reason, tool });
+  };
+  for (const entry of adoptable) {
+    const { tool } = entry;
+    const from: Recorded =
+      entry.source === undefined ? { tool } : { source: entry.source, tool };
+    for (const name of entry.skills) {
+      record(name, from);
+    }
+    for (const name of entry.managed ?? []) {
+      record(name, { ...from, managed: true });
+    }
+    for (const refused of entry.refused ?? []) {
+      record(refused.name, {
+        ...from,
+        refusal: refusalOf(refused, machine.library),
+      });
     }
   }
   return recorded;
@@ -444,7 +475,7 @@ export const projectRows = (input: ProjectionInput): SkillRow[] => {
     ...input,
     names: new Set(inventory.library.map((entry) => entry.name)),
     order: inventory.configurations.map((cfg) => cfg.id),
-    recorded: recordedOf(inventory.adoptable),
+    recorded: recordedOf(inventory),
     universal: new Set(
       inventory.configurations
         .filter((cfg) => cfg.reads_library)
@@ -466,7 +497,7 @@ const compareNames = (a: SkillRow, b: SkillRow) =>
   a.key.localeCompare(b.key);
 
 /** A sorted copy of `items`; `items` is left as it is. */
-const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
+export const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
   const copy = [...items];
   copy.sort(compare);
   return copy;

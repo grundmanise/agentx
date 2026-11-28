@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -410,8 +412,8 @@ type candidate struct {
 	added  bool          // the settings already hold that source
 	state  string
 	reason string
-	code   string   // why it is refused, as an inventory names it, see adoptable
-	fail   *failure // the refusal, which is how a run asked to adopt it answers
+	listed scan.RefusedAdoption // why it is refused, as an inventory lists it, see adoptable
+	fail   *failure             // the refusal, which is how a run asked to adopt it answers
 	// asItIs says the record names nowhere agentx can install the skill
 	// from, and this machine holds a folder of it to keep: adopting it
 	// makes that folder a hub skill, see planAdoption.
@@ -514,19 +516,22 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 // as it is, and any other is refused for what is in the way of that, see
 // asItIsRefusal. managed says an import branch holds the name.
 func (inv *invocation) judgeAsItIs(c *candidate, managed bool, sites siteFinder) {
-	code, reason, f := inv.asItIsRefusal(c.rec, managed, sites)
+	listed, reason, f := inv.asItIsRefusal(c.rec, managed, sites)
 	if f == nil {
 		c.asItIs = true
 		return
 	}
 	c.refuse(f)
-	c.reason, c.code = reason, code
+	c.reason, c.listed = reason, listed
 }
 
 // adoptable is what an inventory says of the skills the other tools
-// installed: for each tool with a record of a skill this machine holds and
-// agentx does not manage, the Vercel skills CLI first, the names an import
-// can adopt and the ones it cannot, each with why. The records are judged as
+// installed: for each tool and each source its records name, the Vercel
+// skills CLI first and then by source, the records that name no source
+// agentx can install from before the others, the names an import can adopt,
+// the ones agentx manages already and the ones an import cannot adopt, each
+// with why. A record whose skill this machine no longer holds is in none.
+// The records are judged as
 // a preview judges them, see adoptCandidates, against the lineage and the
 // settings the scan read under its lock: the record files and the machine
 // are read, and no git runs. What a preview warns of in a record file is the
@@ -540,23 +545,30 @@ func (inv *invocation) adoptable(lineage map[string]lineage.Record, s home.Setti
 		warn(err.Error() + "; the skills another tool installed are not listed")
 		return listed
 	}
-	cands := inv.adoptCandidates(records, lineage, s, quiet)
-	for _, tool := range []string{toolVercel, toolSkillshare} {
-		of := scan.Adoptable{Tool: tool, Skills: []string{}}
-		for _, c := range cands {
-			switch {
-			case c.rec.tool != tool, c.state == adoptManaged:
-			case c.state == adoptRefused:
-				of.Refused = append(of.Refused, scan.RefusedAdoption{Name: c.rec.name, Reason: c.code})
-			default:
-				of.Skills = append(of.Skills, c.rec.name)
-			}
+	for _, c := range inv.adoptCandidates(records, lineage, s, quiet) {
+		i := slices.IndexFunc(listed, func(of scan.Adoptable) bool { return of.Tool == c.rec.tool && of.Source == c.src.URL })
+		if i < 0 {
+			i, listed = len(listed), append(listed, scan.Adoptable{Tool: c.rec.tool, Source: c.src.URL, Skills: []string{}})
 		}
-		if len(of.Skills)+len(of.Refused) > 0 {
-			listed = append(listed, of)
+		switch of := &listed[i]; c.state {
+		case adoptManaged:
+			of.Managed = append(of.Managed, c.rec.name)
+		case adoptRefused:
+			of.Refused = append(of.Refused, c.listed)
+		default:
+			of.Skills = append(of.Skills, c.rec.name)
 		}
 	}
+	slices.SortStableFunc(listed, func(a, b scan.Adoptable) int {
+		return cmp.Or(cmp.Compare(toolOrder(a.Tool), toolOrder(b.Tool)), cmp.Compare(a.Source, b.Source))
+	})
 	return listed
+}
+
+// toolOrder is where a tool's skills come in an inventory: the Vercel
+// skills CLI first.
+func toolOrder(tool string) int {
+	return slices.Index([]string{toolVercel, toolSkillshare}, tool)
 }
 
 // reasonNotAdded is the reason of a candidate whose source the settings do
