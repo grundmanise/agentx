@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -21,6 +22,7 @@ import (
 type Index struct {
 	Sources []Indexed          // sorted by canonical URL
 	read    map[string]reading // what this build made of each source, keyed by its URL and commit
+	hub     Hub                // the hub this build read, for the forks of it this machine can install
 }
 
 // reading is what one build made of one source at one commit: the skills
@@ -50,15 +52,24 @@ type Indexed struct {
 	Skills []Skill // as List reads them, sorted by subpath
 }
 
+// Installable is what the history of a fork on the hub that this machine
+// can install records of it, as its installable_skill event carries it.
+type Installable struct {
+	ForkID          string  `json:"fork_id"`
+	Upstream        string  `json:"upstream,omitempty"` // the canonical URL a forked skill came from
+	UpstreamSubpath *string `json:"upstream_subpath,omitempty"`
+}
+
 // Match is one search result: a skill and the source it is in. The source
 // is named by its canonical URL, which is what `agentx skill add` takes and
 // what `agentx source list` prints, so a result can be acted on as it is.
 type Match struct {
-	Source      string `json:"source"`
-	Subpath     string `json:"subpath"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Tree        string `json:"tree"`
+	Source      string       `json:"source"`
+	Subpath     string       `json:"subpath"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Tree        string       `json:"tree"`
+	Installable *Installable `json:"installable,omitempty"` // of a fork on the hub this machine can install
 }
 
 // Search lists the skills whose name or description contains query, compared
@@ -74,7 +85,11 @@ func (idx *Index) Search(query string) []Match {
 	for _, src := range idx.Sources {
 		for _, s := range src.Skills {
 			if strings.Contains(strings.ToLower(s.Name), q) || strings.Contains(strings.ToLower(s.Description), q) {
-				matches = append(matches, Match{Source: src.URL, Subpath: s.Subpath, Name: s.Name, Description: s.Description, Tree: s.Tree})
+				m := Match{Source: src.URL, Subpath: s.Subpath, Name: s.Name, Description: s.Description, Tree: s.Tree}
+				if in, ok := idx.hub.Installable[s.Name]; ok && src.URL == idx.hub.URL {
+					m.Installable = &in
+				}
+				matches = append(matches, m)
 			}
 		}
 	}
@@ -107,12 +122,14 @@ func (idx *Index) Listing(url string) (Indexed, bool) {
 	return Indexed{}, false
 }
 
-// Hub is the hub as the index reads it: its canonical URL and the tip of
+// Hub is the hub as the index reads it: its canonical URL, the tip of
 // each of its forks' branches, skills/<name>, as the store holds them, by
-// name. The zero Hub is no hub.
+// name, and the forks among them this machine can install. The zero Hub is
+// no hub.
 type Hub struct {
-	URL  string
-	Tips map[string]string
+	URL         string
+	Tips        map[string]string
+	Installable map[string]Installable
 }
 
 // key names what a build made of the hub: its URL and every fork's tip, so
@@ -136,22 +153,24 @@ func (h Hub) key() string {
 // the whole of each source rather than a subpath, since a subpath scopes one
 // listing and is never stored. It lists the hub's forks too, one skill per
 // branch, named after it, as `skill add --name` takes it, with the
-// description of the SKILL.md in its tip's skill directory.
+// description of the SKILL.md in its tip's skill directory, and the ones
+// hub.Installable names carry what it holds of them in a search.
 //
 // prev is the index of the previous build. The sources and their commits are
 // read in one for-each-ref, and a source still at the commit prev read it at
 // keeps prev's skills rather than being listed again; when every source is,
-// prev itself is returned and nothing else runs, so a rescan that follows a
-// change elsewhere on the machine costs one git process, and a machine with
-// no source costs none. A source prev could not list is listed again
-// whatever its commit, so an index built while the store could not
-// answer for one source recovers on the next build rather than holding that
-// source empty until its ref moves. warnings, sorted, name the sources the
-// store cannot list whole, by every build, since each lists them again. A
-// source never fetched is no warning: it is in the index with no skills,
-// and the update check that fetches it says when it cannot.
+// and the hub's installable forks are prev's, prev itself is returned and
+// nothing else runs, so a rescan that follows a change elsewhere on the
+// machine costs one git process, and a machine with no source costs none.
+// A source prev could not list is listed again whatever its commit, so an
+// index built while the store could not answer for one source recovers on
+// the next build rather than holding that source empty until its ref
+// moves. warnings, sorted, name the sources the store cannot list whole, by
+// every build, since each lists them again. A source never fetched is no
+// warning: it is in the index with no skills, and the update check that
+// fetches it says when it cannot.
 func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []string, hub Hub, prev *Index) (idx *Index, warnings []string, err error) {
-	idx = &Index{Sources: []Indexed{}, read: map[string]reading{}}
+	idx = &Index{Sources: []Indexed{}, read: map[string]reading{}, hub: hub}
 	if len(urls) == 0 && hub.URL == "" {
 		return idx, nil, nil
 	}
@@ -200,7 +219,7 @@ func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []strin
 		idx.read[key] = got
 		src.Skills = got.skills
 	}
-	if unchanged {
+	if unchanged && reflect.DeepEqual(prev.hub.Installable, hub.Installable) {
 		return prev, nil, nil
 	}
 	sort.Strings(warnings)

@@ -220,6 +220,30 @@ func NewWalkCache() *WalkCache {
 	return &WalkCache{lineages: map[string]ForkLineage{}}
 }
 
+// Walk is Walk of the tips the cache keeps no lineage of, which it then
+// keeps, with the lineages kept for the others: a commit's lineage never
+// changes. A nil WalkCache walks every tip.
+func (c *WalkCache) Walk(ctx context.Context, r *gitx.Runner, gitDir string, tips []string) (map[string]ForkLineage, error) {
+	lineages := make(map[string]ForkLineage, len(tips))
+	var missing []string
+	for _, tip := range tips {
+		if l, ok := c.get(tip); ok {
+			lineages[tip] = l
+		} else {
+			missing = append(missing, tip)
+		}
+	}
+	walked, err := Walk(ctx, r, gitDir, missing)
+	if err != nil {
+		return nil, err
+	}
+	c.put(walked)
+	for tip, l := range walked {
+		lineages[tip] = l
+	}
+	return lineages, nil
+}
+
 // get is the lineage kept for tip.
 func (c *WalkCache) get(tip string) (ForkLineage, bool) {
 	if c == nil {

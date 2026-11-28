@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import type { Install, Source } from "#/cli/events.gen.ts";
+import type { Install, SearchResult, Source } from "#/cli/events.gen.ts";
 import {
   installableCards,
   installOf,
@@ -1110,7 +1110,7 @@ test("search asks serve once per settled query and shows only the latest answer"
   await expect(row(page, "artifacts")).toBeVisible();
 
   // The matching answer takes the place of the source's card and listing: the open source's
-  // matches, each source counting its own, Hub once your skills on the hub are read.
+  // matches, each source and Hub counting its own.
   await cli.serveEmit([
     {
       query: "pdf",
@@ -1159,7 +1159,7 @@ test("search asks serve once per settled query and shows only the latest answer"
 });
 
 /** A fork on the hub as a search answers it: under the hub's URL, by its branch's name. */
-const hubFork = (name: string) => ({
+const hubFork = (name: string): SearchResult => ({
   description: `The ${name} skill`,
   name,
   source: HUB,
@@ -1167,15 +1167,11 @@ const hubFork = (name: string) => ({
   tree: `t-${name}`,
 });
 
-test("a search covers your skills on the hub: Hub counts and lists the ones to install that match", async ({
+test("a search covers your skills on the hub: its answer alone gives Hub its count and the ones to install that match", async ({
   cli,
   page,
 }) => {
   await openSources(cli, page);
-  await pill(page, "Hub").click();
-  await expect(
-    details(page).getByRole("heading", { name: "me/hub" })
-  ).toBeVisible();
   const field = page.getByRole("searchbox", { name: "Search all sources" });
   await field.fill("pdf");
   await expect.poll(() => cli.serveRequests.length).toBe(1);
@@ -1183,15 +1179,31 @@ test("a search covers your skills on the hub: Hub counts and lists the ones to i
     {
       query: "pdf",
       request_id: lastSearch(cli).request_id,
-      // A fork this machine holds already is not one the hub lists to install.
-      results: [...docResults, hubFork("held-pdf"), hubFork("my-pdf")],
+      results: [
+        ...docResults,
+        // A fork this machine holds already is not one to install.
+        hubFork("held-pdf"),
+        { ...hubFork("team-pdf"), installable: { fork_id: "c3c3c3c3c3c3" } },
+      ],
       type: "search",
     },
   ]);
-  await expect(details(page)).toBeHidden();
-  await expect(pill(page, "Hub")).toHaveAttribute("aria-pressed", "true");
+  // Hub counts with the other pills, from the answer: a search runs no read of your skills on the hub.
+  await expect(pill(page, "acme/skills")).toHaveText("acme/skills1");
   await expect(pill(page, "Hub")).toHaveText("Hub1");
-  expect(await skillNames(grid(page, "Hub"))).toEqual(["my-pdf"]);
+  expect(commandLines(cli)).not.toContain("skill list --remote");
+
+  // Hub lists the match while the read that opening it starts has not ended.
+  const read = cli.register(["skill", "list", "--remote"], {
+    events: installable,
+    holdAfter: 0,
+  });
+  await pill(page, "Hub").click();
+  await read.started;
+  await expect(rowLine(page, "team-pdf")).toContainText("hub skill");
+  expect(await skillNames(grid(page, "Hub"))).toEqual(["team-pdf"]);
+  await expect(details(page)).toBeHidden();
+  read.release();
 
   await field.fill("");
   await expect(

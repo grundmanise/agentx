@@ -52,20 +52,28 @@ const installRemoteRow = "installable"
 
 // installableSkills reads hub skills that the hub, the
 // settings entry hub, holds and records, the store's branches,
-// hold no branch of, sorted by name, with the provenance of each read by one
-// walk of their remote tips. A branch whose name agentx would never give
-// a fork, or whose history records no fork id, is left out, with a
-// warning each: installing the one could not create the local branch, and
-// the other could never be updated or published, since nothing would tell
-// that the two branches are one fork. A branch that is a skill this
-// machine holds under another name, see heldUnderAnotherName, is left out
-// silently: it is the old name of a skill renamed here.
+// hold no branch of, see installableAmong, from the remote-tracking
+// branches the last fetch of the hub left.
 func (inv *invocation) installableSkills(ctx context.Context, gitDir string, hub home.Source, records map[string]lineage.Record) ([]installableSkillEvent, []string, error) {
-	remote := source.RemoteName(source.ID(hub.URL))
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, source.RemoteName(source.ID(hub.URL)))
 	if err != nil {
 		return nil, nil, storeFailure(err)
 	}
+	return inv.installableAmong(ctx, gitDir, hub.URL, tips, records)
+}
+
+// installableAmong is hub skills that the hub at url holds, tips being
+// the tip of each of its branches by name, and records, the store's
+// branches, hold no branch of, sorted by name, with the provenance of each
+// read by one walk of their remote tips, which serve walks once per tip. A
+// branch whose name agentx would never give a fork, or whose history
+// records no fork id, is left out, with a warning each: installing the one
+// could not create the local branch, and the other could never be updated
+// or published, since nothing would tell that the two branches are one
+// fork. A branch that is a skill this machine holds under another name, see
+// heldUnderAnotherName, is left out silently: it is the old name of a skill
+// renamed here.
+func (inv *invocation) installableAmong(ctx context.Context, gitDir, url string, tips map[string]string, records map[string]lineage.Record) ([]installableSkillEvent, []string, error) {
 	var candidates, warnings []string
 	var walk []string
 	for name, tip := range tips {
@@ -78,7 +86,7 @@ func (inv *invocation) installableSkills(ctx context.Context, gitDir string, hub
 			walk = append(walk, tip)
 		}
 	}
-	walked, err := lineage.Walk(ctx, inv.git, gitDir, walk)
+	walked, err := inv.forkWalks.Walk(ctx, inv.git, gitDir, walk)
 	if err != nil {
 		return nil, nil, storeFailure(err)
 	}
@@ -111,7 +119,7 @@ func (inv *invocation) installableSkills(ctx context.Context, gitDir string, hub
 	for _, name := range names {
 		l := walked[tips[name]]
 		ev := installableSkillEvent{event: newEvent("installable_skill"), Name: name, ForkID: l.ID, Commit: tips[name]}
-		_, ev.Source, _, ev.Upstream, ev.UpstreamSubpath = skillOrigin(lineage.Record{Kind: lineage.KindFork, Fork: &l}, hub.URL)
+		_, ev.Source, _, ev.Upstream, ev.UpstreamSubpath = skillOrigin(lineage.Record{Kind: lineage.KindFork, Fork: &l}, url)
 		if l.Base != "" {
 			ev.UpstreamCommit, ev.BaseHash = l.Import.Commit, l.Import.Hash
 		}

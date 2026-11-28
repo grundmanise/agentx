@@ -2,12 +2,7 @@ import { useInterval } from "@mantine/hooks";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import type {
-  InstallableSkillEvent,
-  LibraryEntry,
-  SearchResult,
-  Source,
-} from "#/cli/events.gen.ts";
+import type { LibraryEntry, SearchResult, Source } from "#/cli/events.gen.ts";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchIcon } from "#/components/icons/search.tsx";
 import type { RimRun } from "#/components/progress-rim/rim-progress.ts";
@@ -151,65 +146,42 @@ const usePills = (sources: Source[]) => {
 };
 
 /**
- * Your skills on the hub a search matched: of those the hub lists to install, the ones whose
- * name a match under the hub's URL carries.
+ * Your skills on the hub a search matched: the matches under the hub's URL that this machine can
+ * install, each with what the answer says of it.
  */
-const hubMatches = (
-  installable: InstallableSkillEvent[],
-  results: SearchResult[],
-  hub: string
-) => {
-  const names = new Set(
-    results.filter((r) => r.source === hub).map((r) => r.name)
+const hubMatches = (results: SearchResult[], hub: string) =>
+  results.flatMap((r) =>
+    r.source === hub && r.installable !== undefined
+      ? [{ ...r.installable, name: r.name }]
+      : []
   );
-  return installable.filter((s) => names.has(s.name));
-};
 
-/**
- * Each pill's count of matches, by its key, in place of its skill count: Hub's once your skills
- * on the hub are read.
- */
-const matchCounts = (
-  pills: SourcePill[],
-  results: SearchResult[],
-  installable: InstallableSkillEvent[] | undefined
-) =>
+/** Each pill's count of matches, by its key, in place of its skill count. */
+const matchCounts = (pills: SourcePill[], results: SearchResult[]) =>
   new Map(
-    pills.flatMap((p) => {
-      if (p.key !== HUB_SKILLS) {
-        return [[p.key, results.filter((r) => r.source === p.url).length]];
-      }
-      return installable === undefined
-        ? []
-        : [[p.key, hubMatches(installable, results, p.source.url).length]];
-    })
+    pills.map((p) => [
+      p.key,
+      p.key === HUB_SKILLS
+        ? hubMatches(results, p.source.url).length
+        : results.filter((r) => r.source === p.url).length,
+    ])
   );
 
 /** The cards of a search's matches in the pill's source, or of your skills on the hub, A to Z. */
 const matchedCards = (
   pill: SourcePill,
   results: SearchResult[],
-  library: LibraryEntry[],
-  installable: InstallableSkillEvent[] | undefined
-): SkillCard[] => {
-  if (pill.key === HUB_SKILLS) {
-    return installable === undefined
-      ? noCards
-      : nameOrder(
-          installableCards(
-            hubMatches(installable, results, pill.source.url),
-            library
-          )
-        );
-  }
-  return nameOrder(
-    resultCards(
-      results.filter((r) => r.source === pill.url),
-      library,
-      () => pageRef(pill.source)
-    )
+  library: LibraryEntry[]
+): SkillCard[] =>
+  nameOrder(
+    pill.key === HUB_SKILLS
+      ? installableCards(hubMatches(results, pill.source.url), library)
+      : resultCards(
+          results.filter((r) => r.source === pill.url),
+          library,
+          () => pageRef(pill.source)
+        )
   );
-};
 
 /**
  * The card of the open source, which a search's results replace: folded, it fades out while its
@@ -241,19 +213,6 @@ const FoldingCard = ({
     </div>
   </div>
 );
-
-/** Reads your skills on the hub once a search shows, so that Hub can count its matches. */
-const useInstallableWhileSearching = (
-  searching: boolean,
-  hub: boolean,
-  read: boolean
-) => {
-  useEffect(() => {
-    if (searching && hub && !read) {
-      void loadInstallable();
-    }
-  }, [searching, hub, read]);
-};
 
 /** Whether the listing held of the source `id` is of the commit the inventory gives the source. */
 const isListed = (
@@ -379,15 +338,8 @@ export const SourcesScreen = () => {
   // answer stays, so the list and its Select all count change once, not back to the listing between.
   const results = query.trim() === "" ? undefined : found;
   const activeKey = activePill?.key;
-  useInstallableWhileSearching(
-    results !== undefined,
-    pills.some((p) => p.key === HUB_SKILLS),
-    installable !== undefined
-  );
   const matches =
-    results === undefined
-      ? undefined
-      : matchCounts(pills, results, installable);
+    results === undefined ? undefined : matchCounts(pills, results);
 
   const listing =
     activePill === undefined || activePill.key === HUB_SKILLS
@@ -398,7 +350,7 @@ export const SourcesScreen = () => {
       return noCards;
     }
     if (results !== undefined) {
-      return matchedCards(activePill, results, library, installable);
+      return matchedCards(activePill, results, library);
     }
     if (activePill.key === HUB_SKILLS) {
       return installable === undefined

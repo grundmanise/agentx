@@ -218,6 +218,7 @@ export interface SearchResult {
   name: string;
   description: string;
   tree: string;
+  installable?: Installable;
 }
 
 export interface ListedSkill {
@@ -318,6 +319,12 @@ export interface Plugin {
 export interface Edge {
   from: string;
   to: string;
+}
+
+export interface Installable {
+  fork_id: string;
+  upstream?: string;
+  upstream_subpath?: string;
 }
 
 export interface Occurrence {
