@@ -5,7 +5,6 @@
 import { create } from "zustand";
 
 import type {
-  AdoptionEvent,
   ConflictEvent,
   DiffEvent,
   HandshakeError,
@@ -84,8 +83,6 @@ export interface AppState {
   store: Pick<MachineEvent, "store" | "store_bytes"> | undefined;
   /** Whether the telemetry question was answered this session: it is not asked again. */
   telemetryAnswered: boolean;
-  /** What `skill import` would take over, from its preview. */
-  adoption: AdoptionEvent[];
   /** The controls whose command runs: label → run id. */
   pending: Record<string, string>;
   /** The history of each hub skill read so far, by name. */
@@ -172,7 +169,6 @@ export type UpdateDiffRead =
   | { candidate: string; diffs?: undefined; failed: true; problem: Problem };
 
 export const useAppStore = create<AppState>()(() => ({
-  adoption: [],
   applied: undefined,
   conflicts: {},
   files: {},

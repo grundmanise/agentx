@@ -4,7 +4,6 @@ import {
   doctorWith,
   expect,
   firstInventory,
-  loadLines,
   machineLabel,
   test,
 } from "./harness/cli.ts";
@@ -18,11 +17,11 @@ const launchLines = [
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
 
-/** Launches the app, waits for the store's reads, and loads the store harness. */
+/** Launches the app, waits for its checks, and loads the store harness. */
 const launch = async (cli: MockCli, page: Page) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
-  await expect.poll(() => cli.commands).toEqual([...launchLines, ...loadLines]);
+  await expect.poll(() => cli.commands).toEqual(launchLines);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
   await page.waitForFunction(() => "store" in window);
 };
@@ -39,14 +38,10 @@ const run = async (page: Page, args: string[], success?: string) => {
   );
 };
 
-/** The command lines after the launch and the store's reads. */
-const later = (cli: MockCli) =>
-  cli.commands.slice(launchLines.length + loadLines.length);
+/** The command lines after the launch. */
+const later = (cli: MockCli) => cli.commands.slice(launchLines.length);
 
-test("loads the adoption preview once the checks pass, and names this machine from the inventory", async ({
-  cli,
-  page,
-}) => {
+test("names this machine from the inventory", async ({ cli, page }) => {
   await launch(cli, page);
   await expect(page.getByRole("complementary")).toContainText(machineLabel);
 });

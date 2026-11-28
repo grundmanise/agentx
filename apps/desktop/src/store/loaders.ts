@@ -1,8 +1,7 @@
-// The slices that one-shot reads fill: the adoption preview, the store and what screens
-// read on demand. This machine, its settings and its sources come with the inventory instead
-// (src/store/feed.ts). The adoption preview loads once the startup checks pass, after an import,
-// when Settings opens and on Check updates. A `skill check-updates` run sets when the last
-// check ended; what it found reaches the inventory that follows it.
+// The slices that one-shot reads fill: the store and what screens read on demand. This machine,
+// its settings, its sources and the skills another tool installed come with the inventory instead
+// (src/store/feed.ts). A `skill check-updates` run sets when the last check ended; what it found
+// reaches the inventory that follows it.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
   CliEvent,
@@ -156,38 +155,6 @@ export const loadInstallable = async () => {
   if (remote !== undefined && read !== undefined && now === remote) {
     void keepRead("installable", remote, "", read);
   }
-};
-
-// The preview's run, while one runs, and whether a write since it started asks for one more.
-let adoptionRun: Promise<void> | undefined;
-let adoptionStale = false;
-
-/** Runs the preview until no write asked for another run while it ran. */
-const readAdoption = async () => {
-  try {
-    do {
-      adoptionStale = false;
-      // oxlint-disable-next-line no-await-in-loop
-      await load(["skill", "import"], (events) => ({
-        adoption: events.filter((e) => e.type === "adoption"),
-      }));
-    } while (adoptionStale);
-  } finally {
-    adoptionRun = undefined;
-  }
-};
-
-/**
- * Loads what `skill import` would take over, from its preview, which writes nothing. A call while
- * the preview runs joins that run; `afterWrite`, a call after an import, runs it once more after.
- */
-export const loadAdoption = async ({ afterWrite = false } = {}) => {
-  if (adoptionRun === undefined) {
-    adoptionRun = readAdoption();
-  } else {
-    adoptionStale ||= afterWrite;
-  }
-  await adoptionRun;
 };
 
 // The version of each skill whose history was read, or is being read: name → version.
@@ -474,26 +441,11 @@ export const loadUpdateDiff = async (name: string, candidate: string) => {
   updateDiffCandidates.delete(name);
 };
 
-/**
- * Loads the adoption preview again after a command that may have changed it. The preview is read
- * on demand, not on each scan: what another tool installed seldom changes. An import changes it,
- * and Check updates is the Skills screen's refresh.
- */
-const reloadAdoption = (command: string, args: readonly string[]) => {
-  if (command === "skill import" && args.length > 2) {
-    void loadAdoption({ afterWrite: true });
-  }
-  if (command === "skill check-updates") {
-    void loadAdoption();
-  }
-};
-
-/** What to load again after a command that may have changed something. */
-const afterCommand = ({ args, command, exitCode, read }: Finished) => {
+/** What the store notes after a command that may have changed something. */
+const afterCommand = ({ command, exitCode, read }: Finished) => {
   if (read) {
     return;
   }
-  reloadAdoption(command, args);
   // A check that could not reach a source (exit 3) still checked the others.
   if (
     command === "skill check-updates" &&
@@ -505,12 +457,11 @@ const afterCommand = ({ args, command, exitCode, read }: Finished) => {
 
 let started = false;
 
-/** Loads every slice, and keeps each one current from now on. Called once the checks pass. */
+/** Keeps the store current after each command from now on. Called once the checks pass. */
 export const startLoaders = () => {
   if (started) {
     return;
   }
   started = true;
   onFinished(afterCommand);
-  void loadAdoption();
 };

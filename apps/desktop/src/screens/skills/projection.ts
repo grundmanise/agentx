@@ -1,10 +1,9 @@
-// What the Skills screen shows, projected from the store and nothing else: one row per skill on
-// the machine, grouped by where it comes from, with what the list and the detail pane say about
-// it. Pure functions over the applied inventory and the store's slices, so that every later change
-// to the screen reads a skill the same way. Nothing here predicts: a row changes only when the
-// inventory does.
+// What the Skills screen shows, projected from the inventory and nothing else: one row per skill
+// on the machine, grouped by where it comes from, with what the list and the detail pane say about
+// it. Pure functions over the applied inventory, so that every later change to the screen reads a
+// skill the same way. Nothing here predicts: a row changes only when the inventory does.
 import type {
-  AdoptionEvent,
+  AdoptionTool,
   Configuration,
   InventoryEvent,
   LibraryCandidate,
@@ -12,6 +11,7 @@ import type {
   LibraryHubAhead,
   Occurrence,
   Plugin,
+  RefusedAdoption,
   SkillNode,
 } from "#/cli/events.gen.ts";
 import { formatDate } from "#/lib/dates.ts";
@@ -59,8 +59,8 @@ export interface SkillRow {
   update?: UpdateOffer;
   /** The plugin that provides it, for a plugin's skill. */
   plugin?: Plugin;
-  /** The one adoption entry that names it, for an unmanaged skill another tool installed. */
-  adoption?: AdoptionEvent;
+  /** What the install records of another tool say of it, for an unmanaged skill that tool installed. */
+  recorded?: Recorded;
   /** The name of the skill this one was forked from, when that skill is in the library too. */
   forkedFrom?: string;
   /**
@@ -200,9 +200,36 @@ export const updateKey = (update: UpdateOffer) =>
     update.upstream?.upstream_commit ?? "",
   ].join(":");
 
-/** The tool an adoption record names, as the product calls it. */
-export const toolName = (adoption: AdoptionEvent): string => {
-  switch (adoption.tool) {
+/**
+ * A skill `skill import` cannot adopt, as the inventory lists it, with the path the library
+ * would hold it at.
+ */
+export interface Refusal extends RefusedAdoption {
+  libraryPath: string;
+}
+
+/** A refused skill of the inventory on the machine whose library is `library`. */
+export const refusalOf = (
+  refused: RefusedAdoption,
+  library: string
+): Refusal => ({ ...refused, libraryPath: `${library}/${refused.name}` });
+
+/**
+ * What the inventory says of a skill another tool installed (`adoptable`): the tool, the source
+ * its record names when it names one, and whether `skill import` can take it.
+ */
+export interface Recorded {
+  tool: AdoptionTool;
+  source?: string;
+  /** agentx manages a skill of this name already. */
+  managed?: true;
+  /** What is in the way when `skill import` cannot take it. */
+  refusal?: Refusal;
+}
+
+/** A tool that installs skills, as the product calls it. */
+export const toolName = (tool: AdoptionTool): string => {
+  switch (tool) {
     case "vercel": {
       return "Skills CLI";
     }
@@ -210,9 +237,37 @@ export const toolName = (adoption: AdoptionEvent): string => {
       return "Skillshare";
     }
     default: {
-      return adoption.tool;
+      return tool;
     }
   }
+};
+
+/** The skills the inventory lists under `adoptable`, by name; the first entry that names one. */
+const recordedOf = ({ adoptable, machine }: InventoryEvent) => {
+  const recorded = new Map<string, Recorded>();
+  const record = (name: string, of: Recorded) => {
+    if (!recorded.has(name)) {
+      recorded.set(name, of);
+    }
+  };
+  for (const entry of adoptable) {
+    const { tool } = entry;
+    const from: Recorded =
+      entry.source === undefined ? { tool } : { source: entry.source, tool };
+    for (const name of entry.skills) {
+      record(name, from);
+    }
+    for (const name of entry.managed ?? []) {
+      record(name, { ...from, managed: true });
+    }
+    for (const refused of entry.refused ?? []) {
+      record(refused.name, {
+        ...from,
+        refusal: refusalOf(refused, machine.library),
+      });
+    }
+  }
+  return recorded;
 };
 
 export const GROUP_HUB = "hub";
@@ -287,7 +342,6 @@ const originalOf = (entry: LibraryEntry, library: LibraryEntry[]) =>
 
 export interface ProjectionInput {
   inventory: InventoryEvent;
-  adoption: AdoptionEvent[];
 }
 
 interface Context extends ProjectionInput {
@@ -297,6 +351,8 @@ interface Context extends ProjectionInput {
   order: string[];
   /** The names the library holds a skill under. */
   names: Set<string>;
+  /** The unmanaged skills another tool installed, by name. */
+  recorded: Map<string, Recorded>;
 }
 
 const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
@@ -333,9 +389,9 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
   ) {
     row.update = update;
   }
-  const adopted = c.adoption.find((a) => a.name === entry.name);
-  if (kind === "disk" && adopted !== undefined) {
-    row.adoption = adopted;
+  const recorded = c.recorded.get(entry.name);
+  if (kind === "disk" && recorded !== undefined) {
+    row.recorded = recorded;
   }
   const original =
     kind === "hub" ? originalOf(entry, c.inventory.library) : undefined;
@@ -401,11 +457,9 @@ const nodeRow = (node: SkillNode, c: Context): SkillRow => {
   if (plugin !== undefined) {
     row.plugin = plugin;
   }
-  const adopted = inPlugin
-    ? undefined
-    : c.adoption.find((a) => a.name === node.name);
-  if (adopted !== undefined) {
-    row.adoption = adopted;
+  const recorded = inPlugin ? undefined : c.recorded.get(node.name);
+  if (recorded !== undefined) {
+    row.recorded = recorded;
   }
   const held = inPlugin ? undefined : occurrenceOf(row);
   if (held !== undefined && c.names.has(directoryName(held.path))) {
@@ -421,6 +475,7 @@ export const projectRows = (input: ProjectionInput): SkillRow[] => {
     ...input,
     names: new Set(inventory.library.map((entry) => entry.name)),
     order: inventory.configurations.map((cfg) => cfg.id),
+    recorded: recordedOf(inventory),
     universal: new Set(
       inventory.configurations
         .filter((cfg) => cfg.reads_library)
@@ -442,7 +497,7 @@ const compareNames = (a: SkillRow, b: SkillRow) =>
   a.key.localeCompare(b.key);
 
 /** A sorted copy of `items`; `items` is left as it is. */
-const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
+export const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
   const copy = [...items];
   copy.sort(compare);
   return copy;
@@ -648,9 +703,9 @@ export const originOf = (row: SkillRow): string => {
       return `${row.plugin?.name ?? row.occurrences[0]?.plugin ?? ""} plugin`;
     }
     case "disk": {
-      return row.adoption === undefined
+      return row.recorded === undefined
         ? "found on disk"
-        : toolName(row.adoption);
+        : toolName(row.recorded.tool);
     }
     default: {
       return "";

@@ -1,27 +1,22 @@
 // Import skills, in the Hub card of Settings: one button per tool that installed skills agentx can
-// adopt (the adoption preview's candidates), each opening the adopt dialog for that tool's
-// skills. With none to adopt, a line under the row says so, and the row stays. Opening Settings reads
-// the preview again, so a skill another tool installed while the app ran shows up.
-import { useEffect, useState } from "react";
+// adopt (the inventory's `adoptable`), each opening the adopt dialog for that tool's skills. With
+// none to adopt, a line under the row says so, and the row stays.
+import { useState } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
 import { SettingsRow } from "#/screens/settings/section.tsx";
 import { AdoptDialog } from "#/screens/skills/adopt-dialog.tsx";
 import { toolsToAdopt, useAdoptRun } from "#/screens/skills/adopt.ts";
 import type { ToolArg } from "#/screens/skills/adopt.ts";
-import { loadAdoption } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
 
 export const AdoptSkillsRow = () => {
-  const adoption = useAppStore((s) => s.adoption);
+  const inventory = useAppStore((s) => s.inventory);
   const busy = useAdoptRun((s) => s.run !== undefined);
   // The tool whose skills the dialog adopts. It stays while the dialog closes.
   const [adopting, setAdopting] = useState<ToolArg>();
   const [open, setOpen] = useState(false);
-  useEffect(() => {
-    void loadAdoption();
-  }, []);
-  const tools = toolsToAdopt(adoption);
+  const tools = toolsToAdopt(inventory);
   return (
     <SettingsRow
       name="Import skills"

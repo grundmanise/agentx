@@ -13,7 +13,7 @@ import {
   NOTES_COMMAND,
   SLACK_URL,
 } from "./fixtures/servers.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -37,14 +37,12 @@ const names = async (where: Locator) =>
     )
   );
 
-/** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
-const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  );
+/** Whether a command line is one the launch runs. */
+const isLaunch = (line: string[]) =>
+  launchLines.some((known) => known.join(" ") === line.join(" "));
 
 /** The command lines the screen itself ran. */
-const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunchOrLoad(l));
+const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunch(l));
 
 /** Opens the MCP servers screen on the fixture machine and waits for its rows. */
 const openServers = async (cli: MockCli, page: Page) => {

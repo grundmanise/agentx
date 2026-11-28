@@ -123,8 +123,6 @@ test("Settings opens the log, and Debug output runs later commands and serve wit
   await page.keyboard.press("Escape");
   await expect(log(page)).toBeHidden();
 
-  // Check updates reads the import preview again, with the flag too.
-  cli.register(["skill", "import", "--verbose"]);
   cli.register(["skill", "check-updates", "--verbose"], {
     logs: [
       { level: "debug", message: "git fetch --quiet src-1: exit status 0" },

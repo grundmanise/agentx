@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { pdfUpdate } from "./fixtures/updates.ts";
-import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
+import { expect, firstInventory, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -17,11 +17,11 @@ const value = (page: Page, term: string) =>
 const staleBar = (page: Page) =>
   page.getByRole("status").and(page.locator(":not(.sr-only)"));
 
-/** Launches the app, waits for the store's reads, and shows the store. */
+/** Launches the app, waits for its checks, and shows the store. */
 const launch = async (cli: MockCli, page: Page) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
-  await expect.poll(() => cli.commands).toEqual([...launchLines, ...loadLines]);
+  await expect.poll(() => cli.commands).toEqual(launchLines);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/store.tsx" });
   await page.waitForFunction(() => "store" in window);
   await expect(value(page, "Counter")).toHaveText("1");

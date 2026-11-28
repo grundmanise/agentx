@@ -1,17 +1,10 @@
 // The Skills fixture's machine with two more library skills, one whose source was removed and one
-// the CLI refuses to adopt, and the adoption preview that names them: what the banners that settle
-// a skill and a refused entry are tested against.
-import type {
-  AdoptionEvent,
-  LibraryEntry,
-  SkillNode,
-} from "#/cli/events.gen.ts";
+// the CLI refuses to adopt: what the banners that settle a skill and a refused skill are tested
+// against.
+import type { LibraryEntry, SkillNode } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
-import {
-  adoption as skillsAdoption,
-  inventory as skillsInventory,
-} from "./skills.ts";
+import { inventory as skillsInventory } from "./skills.ts";
 
 export const OLD = "https://github.com/old/skills";
 const LIBRARY = "/home/me/.agents/skills";
@@ -83,9 +76,22 @@ const node = (
   physical_id: `skill:${hash}`,
 });
 
-/** The serve child's first inventory on this machine. */
+/**
+ * The serve child's first inventory on this machine. What `skill import` can adopt is the skill
+ * of the Skills fixture, and it refuses the symlink.
+ */
 export const inventory = {
   ...skillsInventory,
+  adoptable: [
+    {
+      refused: [
+        { name: "legacy", path: "/home/me/work/legacy", reason: "symlink" },
+      ],
+      skills: [],
+      tool: "vercel",
+    },
+    ...skillsInventory.adoptable,
+  ],
   library: [...skillsInventory.library, ...more],
   skills: [
     ...skillsInventory.skills,
@@ -98,21 +104,3 @@ export const inventory = {
     ),
   ],
 } satisfies InlineEvent;
-
-/**
- * What `skill import` would take over: the candidate of the Skills fixture, and one entry it
- * refuses, in the CLI's words. That one names no source: the CLI gives one only where it can
- * install from it.
- */
-export const adoption: AdoptionEvent[] = [
-  ...skillsAdoption,
-  {
-    file: "/home/me/.agents/.skill-lock.json",
-    name: "legacy",
-    reason: `a symlink to /home/me/work/legacy. To import it, move that folder to ${LIBRARY}/legacy`,
-    schema_version: 5,
-    state: "refused",
-    tool: "vercel",
-    type: "adoption",
-  },
-];

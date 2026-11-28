@@ -25,7 +25,6 @@ import {
   sourceSkillEvents,
 } from "./fixtures/skill-create.ts";
 import {
-  adoption,
   fileReads,
   filesOf,
   history,
@@ -33,7 +32,7 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { expect, libraryPath, loadLines, test } from "./harness/cli.ts";
+import { expect, libraryPath, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 import {
   moreAddActions,
@@ -49,13 +48,12 @@ const launchLines = [
 /** The reads the detail pane runs on its own when a skill is selected. */
 const detailReads = new Set(["skill history", "skill files", "skill diff"]);
 
-/** The command lines the dialog ran: everything but the launch, the store's and the pane's reads. */
+/** The command lines the dialog ran: everything but the launch and the pane's reads. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
-      ![...launchLines, ...loadLines].some(
-        (known) => known.join(" ") === l.join(" ")
-      ) && !detailReads.has(l.slice(0, 2).join(" "))
+      !launchLines.some((known) => known.join(" ") === l.join(" ")) &&
+      !detailReads.has(l.slice(0, 2).join(" "))
   );
 
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
@@ -81,7 +79,6 @@ const createButton = (page: Page) =>
 /** Registers the reads of the fixture machine and of the new skill once it is selected. */
 const registerReads = (cli: MockCli, machine: InlineEvent = inventory) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["skill", "import"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });

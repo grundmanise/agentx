@@ -23,7 +23,9 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/rpc"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
+	"github.com/grundmanise/agentx/apps/cli/internal/skillshare"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/grundmanise/agentx/apps/cli/internal/vercel"
 )
 
 // updateCheckEvent ends the report of one update check of the serve child:
@@ -452,6 +454,10 @@ func (inv *invocation) reportUpdateCheck(at time.Time, ok bool) {
 // directory appearing there is the signal, and a sync takes the new tree in.
 // The worktrees' own admin directories are not watched: git writes an index
 // there on every status, which would be a signal of its own.
+//
+// The directories that hold the other tools' install records are watched
+// too, see recordDirs: an inventory says which skills those records name,
+// and a tool may write its record after the skill's folder.
 func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
 	logs := filepath.Join(gitx.StorePath(h), "logs")
@@ -462,7 +468,31 @@ func (inv *invocation) watchedDirs() (dirs, trees []string) {
 			trees = append(trees, dir)
 		}
 	}
-	return append([]string{h, gitx.StorePath(h), logs, refs}, trees...), trees
+	dirs = append([]string{h, gitx.StorePath(h), logs, refs}, inv.recordDirs()...)
+	return append(dirs, trees...), trees
+}
+
+// recordDirs are the directories that hold the files the other tools'
+// install records are read from, see readRecords, each once: those of the
+// lock files of the Vercel skills CLI, that of Skillshare's configuration
+// and the folder Skillshare installs into, where its store is, as its
+// configuration names it when serve starts. A configuration that cannot be
+// read names no folder.
+func (inv *invocation) recordDirs() []string {
+	var dirs []string
+	add := func(dir string) {
+		if !slices.Contains(dirs, dir) {
+			dirs = append(dirs, dir)
+		}
+	}
+	for _, lock := range vercel.LockPaths(inv.env, inv.dirs.User) {
+		add(filepath.Dir(lock))
+	}
+	add(filepath.Dir(skillshare.Locate(inv.env, inv.dirs.Config).Config))
+	if cfg, err := inv.skillshareConfig(); err == nil {
+		add(cfg.Skills)
+	}
+	return dirs
 }
 
 // indexedHub is the hub as the source index reads it: its URL and the

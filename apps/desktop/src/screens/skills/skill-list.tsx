@@ -208,9 +208,9 @@ const CheckUpdates = () => {
  * agentx can adopt: it opens the adopt dialog for every such tool.
  */
 const AdoptAll = ({ onOpen }: { onOpen: () => void }) => {
-  const adoption = useAppStore((s) => s.adoption);
+  const inventory = useAppStore((s) => s.inventory);
   const busy = useAdoptRun((s) => s.run !== undefined);
-  if (toolsToAdopt(adoption).length === 0) {
+  if (toolsToAdopt(inventory).length === 0) {
     return null;
   }
   return (
@@ -885,7 +885,7 @@ export const SkillList = ({
 }) => {
   const [adopting, setAdopting] = useState(false);
   // The tools the open adopt dialog covers: every tool with skills to adopt when it opened.
-  const adoption = useAppStore((s) => s.adoption);
+  const inventory = useAppStore((s) => s.inventory);
   const [adoptTools, setAdoptTools] = useState<ToolArg[]>([]);
   // Whether any group is open; a plugin's subgroup shows only while its group is open.
   const anyOpen = groups.some((g) => !collapse.collapsed.has(g.key));
@@ -975,7 +975,7 @@ export const SkillList = ({
         onToggleGroup={onToggleGroup}
         onToggle={onToggle}
         onAdoptAll={() => {
-          setAdoptTools(toolsToAdopt(adoption).map((t) => t.arg));
+          setAdoptTools(toolsToAdopt(inventory).map((t) => t.arg));
           setAdopting(true);
         }}
       />

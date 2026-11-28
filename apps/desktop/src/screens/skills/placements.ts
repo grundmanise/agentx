@@ -12,7 +12,7 @@ import type {
 import type { AgentChipState } from "#/components/agent-chip.tsx";
 import { plural } from "#/lib/plural.ts";
 import { directoryName, occurrenceOf } from "#/screens/skills/projection.ts";
-import type { SkillRow } from "#/screens/skills/projection.ts";
+import type { Refusal, SkillRow } from "#/screens/skills/projection.ts";
 
 /**
  * Whether a configuration sees the skill: through its placement, displaced when the placement's
@@ -58,27 +58,63 @@ export type Importability =
   | { args: string[] }
   | { why: string; inTheWay?: string };
 
-/** The CLI's reason, a clause about the skill, as a sentence of the app's. */
-const asSentence = (reason: string | undefined, fallback: string) =>
-  reason === undefined || reason === ""
-    ? fallback
-    : `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
+/**
+ * Why `skill import` cannot take a skill another tool installed, and what to do about it, from
+ * the reason the inventory lists and the paths it is about. A reason the app does not know says
+ * only that.
+ */
+export const refusalText = ({
+  libraryPath,
+  link,
+  path = "",
+  reason,
+}: Refusal): string => {
+  switch (reason) {
+    case "name_taken": {
+      return `agentx already manages a skill of this name, whose folder ${libraryPath} is missing. To import this one, remove that skill first`;
+    }
+    case "symlink": {
+      return `A symlink to ${path}. To import it, move that folder to ${link ?? libraryPath}`;
+    }
+    case "file": {
+      return `A file, and a skill is a folder. To import it, put the skill's folder at ${libraryPath}`;
+    }
+    case "no_skill_file": {
+      return `A folder with no SKILL.md file. To import it, add a SKILL.md to ${libraryPath}`;
+    }
+    case "tracked": {
+      return "A whole repository that Skillshare tracks. Add that repository as a source, then install its skills";
+    }
+    case "unplaced": {
+      return `Only in ${path}, where no agent looks for skills. To import it, move that folder to ${libraryPath}`;
+    }
+    case "invalid_name": {
+      return `Not a valid skill name. To import it, rename ${path}`;
+    }
+    case "repository": {
+      return `A Git repository of its own. To import it, move ${path} out of the folder`;
+    }
+    default: {
+      return "It can't be imported";
+    }
+  }
+};
 
 export const importOf = (row: SkillRow): Importability | undefined => {
   if (row.kind !== "disk") {
     return undefined;
   }
-  const state = row.adoption?.state;
-  if (state === "candidate") {
+  const { recorded } = row;
+  if (recorded?.refusal !== undefined) {
+    return { why: refusalText(recorded.refusal) };
+  }
+  if (recorded !== undefined && recorded.managed !== true) {
     return { args: adoptLine(row.name) };
   }
-  if (state === "refused") {
-    return { why: asSentence(row.adoption?.reason, "It can't be imported") };
-  }
   if (row.entry !== undefined) {
-    return state === undefined
+    return recorded === undefined
       ? { args: adoptLine(row.name) }
-      : { why: asSentence(row.adoption?.reason, "agentx already manages it") };
+      : { why: "agentx already manages it" };
   }
   const occurrence = occurrenceOf(row);
   if (occurrence === undefined) {
@@ -101,8 +137,8 @@ export const importOf = (row: SkillRow): Importability | undefined => {
  * The `skill import` command line that takes over an unmanaged skill, or undefined when
  * `skill import` has no way to take it:
  *
- * - a skill another tool recorded, which the CLI can adopt (`candidate`), is installed from its
- *   source, or becomes a hub skill with its files as they are when the record names none;
+ * - a skill another tool recorded, which the CLI can adopt, is installed from its source, or
+ *   becomes a hub skill with its files as they are when the record names none;
  * - a library skill no tool recorded becomes a hub skill in its place;
  * - a skill a client holds as a real directory in its own skills directory is named by that
  *   directory, which moves into the library, unless the library holds another skill under that

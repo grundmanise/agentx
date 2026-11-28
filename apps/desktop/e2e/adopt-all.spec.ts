@@ -1,6 +1,6 @@
 // Adopting another tool's skills all at once: the Adopt skills section of Settings and the
 // Unmanaged group's Import all, both opening the adopt dialog. The dialog lists the skills before
-// the run (the ones the preview refuses marked, with the reason), runs one `skill import --all`
+// the run (the ones the inventory lists as refused marked, with why), runs one `skill import --all`
 // with a `--from` for each tool it covers, with each row's state and one progress line, then shows
 // each row's result and a summary. A run that fails as a whole says why in the dialog.
 import type { Locator, Page } from "@playwright/test";
@@ -10,8 +10,6 @@ import {
   bothToolsWarnings,
   inventoryWith,
   MOVED,
-  nothingToAdopt,
-  previewWith,
   skillsCliNames,
   skillsCliNoneRun,
   skillsCliRun,
@@ -20,7 +18,7 @@ import {
   skillshareRun,
 } from "./fixtures/adopt-all.ts";
 import { fileReads, filesOf, history } from "./fixtures/skills.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
 
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
@@ -40,19 +38,18 @@ const rows = (where: Locator, tool: string) =>
     .getByRole("region", { name: tool })
     .getByRole("listitem");
 const progress = (where: Locator) => where.getByRole("status");
-/** The skills the preview refused, folded under the list. */
+/** The skills the inventory lists as refused, folded under the list. */
 const refused = (where: Locator) =>
   where.getByRole("region", { name: "Can't be imported" });
 
 /**
- * The command lines the screens ran: everything but the launch, the store's and the pane's reads,
+ * The command lines the screens ran: everything but the launch and the pane's reads,
  * and the read of the store's size Settings runs as it shows.
  */
 const ran = (cli: MockCli) =>
   cli.commands.filter(
     (l) =>
       !["version", "doctor", "machine"].includes(l[0] ?? "") &&
-      !loadLines.some((known) => known.join(" ") === l.join(" ")) &&
       !["skill files", "skill diff", "skill history"].includes(
         l.slice(0, 2).join(" ")
       )
@@ -75,28 +72,21 @@ const registerReads = (cli: MockCli) => {
 };
 
 /** Opens the Skills screen on the machine with skills of both tools to adopt. */
-const openSkills = async (
-  cli: MockCli,
-  page: Page,
-  preview = previewWith(),
-  path = "/#/skills"
-) => {
+const openSkills = async (cli: MockCli, page: Page, path = "/#/skills") => {
   cli.onServeStart({ events: [inventoryWith()] });
-  cli.register(["skill", "import"], { events: preview });
   registerReads(cli);
   await page.goto(path);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect(list(page).getByRole("region").first()).toBeVisible();
 };
 
-/** Opens Settings on that machine. */
+/** Opens Settings on that machine, with `managed` adopted already. */
 const openSettings = async (
   cli: MockCli,
   page: Page,
-  preview = previewWith()
+  managed: string[] = []
 ) => {
-  cli.onServeStart({ events: [inventoryWith()] });
-  cli.register(["skill", "import"], { events: preview });
+  cli.onServeStart({ events: [inventoryWith(managed)] });
   await page.goto("/#/settings");
   await expect(settingsSection(page)).toBeVisible();
 };
@@ -130,7 +120,7 @@ test.describe("Import skills in the Hub card of Settings", () => {
     cli,
     page,
   }) => {
-    await openSettings(cli, page, previewWith(skillshareNames));
+    await openSettings(cli, page, skillshareNames);
     await expect(
       settingsSection(page).getByRole("button", { name: /^Import from/u })
     ).toHaveText(["Import from Skills CLI"]);
@@ -140,7 +130,7 @@ test.describe("Import skills in the Hub card of Settings", () => {
     cli,
     page,
   }) => {
-    await openSettings(cli, page, nothingToAdopt);
+    await openSettings(cli, page, [...skillsCliNames, ...skillshareNames]);
     const section = settingsSection(page);
     await expect(section).toContainText(
       "Let agentx manage the skills another tool installed."
@@ -183,7 +173,7 @@ test.describe("Import skills in the Hub card of Settings", () => {
   });
 
   test("the dialog for one skill says so", async ({ cli, page }) => {
-    await openSettings(cli, page, previewWith(["api-docs"]));
+    await openSettings(cli, page, ["api-docs"]);
     await settingsSection(page)
       .getByRole("button", { name: "Import from Skillshare" })
       .click();
@@ -243,9 +233,6 @@ test.describe("Import skills in the Hub card of Settings", () => {
         })
     ).toBeDisabled();
 
-    cli.register(["skill", "import"], {
-      events: previewWith(["deck-outline", "scratch"]),
-    });
     run.release();
     await expect(progress(open)).toHaveText("Imported 2 of 3 skills");
     await expect(rows(open, "Skills CLI")).toHaveText([
@@ -296,7 +283,6 @@ test.describe("Import skills in the Hub card of Settings", () => {
     cli.register(["skill", "import", "--from", "skillshare", "--all"], {
       events: skillshareRun,
     });
-    cli.register(["skill", "import"], { events: previewWith(skillshareNames) });
     await settingsSection(page)
       .getByRole("button", { name: "Import from Skillshare" })
       .click();
@@ -308,6 +294,7 @@ test.describe("Import skills in the Hub card of Settings", () => {
       "Imported: frontend__ui",
     ]);
     await open.getByRole("button", { name: "Done" }).click();
+    await afterRun(cli, skillshareNames);
     await expect(
       settingsSection(page).getByRole("button", { name: /^Import from/u })
     ).toHaveText(["Import from Skills CLI"]);
@@ -420,9 +407,6 @@ test.describe("Import all in the Unmanaged header", () => {
       "Importing: api-docs",
       "Importing: frontend__ui",
     ]);
-    cli.register(["skill", "import"], {
-      events: previewWith([...skillsCliNames, ...skillshareNames]),
-    });
     run.release();
     await expect(progress(open)).toHaveText("Imported 5 skills");
     await expect(rows(open, "Skills CLI")).toHaveText([
@@ -460,7 +444,7 @@ test.describe("Import all in the Unmanaged header", () => {
     cli,
     page,
   }) => {
-    await openSkills(cli, page, previewWith(), `/#/skills/${MOVED}`);
+    await openSkills(cli, page, `/#/skills/${MOVED}`);
     cli.register(
       [
         "skill",
@@ -480,9 +464,6 @@ test.describe("Import all in the Unmanaged header", () => {
         })),
       }
     );
-    cli.register(["skill", "import"], {
-      events: previewWith(["deck-outline", "scratch", ...skillshareNames]),
-    });
     await unmanaged(page).getByRole("button", { name: "Import all" }).click();
     const open = dialog(page);
     await open.getByRole("button", { exact: true, name: "Import" }).click();

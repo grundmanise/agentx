@@ -3,7 +3,7 @@
 import type { Page } from "@playwright/test";
 
 import { commitHelperForked, commitHelperRenamed } from "./fixtures/fork.ts";
-import { adoption, filesOf } from "./fixtures/skills.ts";
+import { filesOf } from "./fixtures/skills.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
@@ -26,7 +26,6 @@ const openSkill = async (
   key = name
 ) => {
   cli.onServeStart({ events: [commitHelperForked] });
-  cli.register(["skill", "import"], { events: adoption });
   for (const n of ["commit-helper", "my-commit-helper", "release-notes"]) {
     cli.register(["skill", "history", n], { events: [] });
     cli.register(["skill", "files", n], { events: filesOf(n) });

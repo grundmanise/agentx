@@ -375,8 +375,9 @@ func TestServeWatchesInsideSkills(t *testing.T) {
 
 // TestWatchedDirsCoverEverySkillsDirectoryOnce pins what serve asks the
 // watcher for: agentx home, the store and its logs and logs/refs flat,
-// then every tree, each real path once however many clients read it. The
-// flat logs directories are where a skill's first publish shows: it creates
+// the directories of the other tools' install records flat, then every
+// tree, each real path once however many clients read it. The flat logs
+// directories are where a skill's first publish shows: it creates
 // logs/refs/remotes and everything below it at once.
 func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 	t.Parallel()
@@ -391,7 +392,13 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 	if got, want := dirs[:4], []string{"/u/.agentx", repo, repo + "/logs", repo + "/logs/refs"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("flat directories = %v, want %v", got, want)
 	}
-	if got, want := dirs[4:], trees; !reflect.DeepEqual(got, want) {
+	// The lock files of the Vercel skills CLI, then Skillshare's
+	// configuration and the folder its store is in.
+	records := []string{"/u/.local/state/skills", "/u/.agents", "/u/.config/skillshare", "/u/.config/skillshare/skills"}
+	if got := dirs[4 : 4+len(records)]; !reflect.DeepEqual(got, records) {
+		t.Errorf("record directories = %v, want %v", got, records)
+	}
+	if got, want := dirs[4+len(records):], trees; !reflect.DeepEqual(got, want) {
 		t.Errorf("dirs after the flat ones = %v, want the trees %v", got, want)
 	}
 	// The reflogs of the fork branches are where a commit made with git in
@@ -445,6 +452,35 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 	names := skillNames(inventory)
 	sort.Strings(names)
 	equal(t, "skills", strings.Join(names, " "), "commit review")
+	equal(t, "exit", p.close(), 0)
+	equal(t, "stderr", p.stderr.String(), "")
+}
+
+// TestServeWatchesAToolsInstallRecords covers a tool that writes its record
+// after the skill's folder: the record alone is a change signal, and the
+// inventory that follows names the skill as one that tool installed.
+func TestServeWatchesAToolsInstallRecords(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	h.addLibrarySkill(t, "commit")
+	if err := os.MkdirAll(filepath.Dir(h.lockPath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := h.serve(t, "--json")
+	inventory := p.next("inventory")
+	equal(t, "adoptable", len(inventory["adoptable"].([]any)), 0)
+	// Wait until serve is idle: its first scan created the lock file, a
+	// change in agentx home that schedules one more scan.
+	p.refreshed("idle")
+
+	h.writeLock(h.lockPath(), map[string]lockEntry{
+		"commit": {Source: "owner/repo", SourceType: "github", SourceURL: "https://github.com/owner/repo.git"},
+	})
+	inventory = p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
+	if got, want := inventory["adoptable"], []any{map[string]any{"tool": toolVercel, "source": "https://github.com/owner/repo", "skills": []any{"commit"}}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("adoptable = %v, want %v", got, want)
+	}
 	equal(t, "exit", p.close(), 0)
 	equal(t, "stderr", p.stderr.String(), "")
 }

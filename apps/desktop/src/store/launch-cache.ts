@@ -1,5 +1,5 @@
-// The kept inventory: the last inventory the app applied, with the slices the store loads at
-// start, kept for the next launch. A launch that finds it fills the store from it before the first
+// The kept inventory: the last inventory the app applied, with the store slice Settings reads,
+// kept for the next launch. A launch that finds it fills the store from it before the first
 // render, so the screens show at once, while the checks run and the serve child scans; what they
 // report then replaces it. The browser's localStorage holds it, as one item: the read is
 // synchronous, and the app writes no file. What another build of the app kept is dropped, since
@@ -13,9 +13,8 @@ const KEY = "agentx.launch";
 /** How long the store is quiet before it is written: a launch changes every slice within moments. */
 const WRITE_AFTER_MS = 500;
 
-/** What is kept: the inventory, and what the store loads once the checks pass. */
+/** What is kept: the inventory, and the store as Settings last read it. */
 const SLICES = [
-  "adoption",
   "inventory",
   "store",
 ] as const satisfies readonly (keyof AppState)[];
@@ -28,7 +27,6 @@ interface Kept extends Slices {
 }
 
 const slicesOf = (s: AppState): Slices => ({
-  adoption: s.adoption,
   inventory: s.inventory,
   store: s.store,
 });

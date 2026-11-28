@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
+import { expect, firstInventory, test } from "./harness/cli.ts";
 
 // Inside the Tauri window every command is a JSON-RPC request to the serve child, over its stdin
 // and stdout, which the mocked Rust shell relays. A harness module calls the transport module and
@@ -9,8 +9,8 @@ import { expect, firstInventory, loadLines, test } from "./harness/cli.ts";
 test.beforeEach(async ({ cli, page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
-  // The launch ran version, doctor and the store's reads; each test reads only its own lines.
-  await expect.poll(() => cli.commands.length).toBe(2 + loadLines.length);
+  // The launch ran version and doctor; each test reads only its own lines.
+  await expect.poll(() => cli.commands.length).toBe(2);
   cli.commands.splice(0);
   cli.stdin.splice(0);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/transport.ts" });

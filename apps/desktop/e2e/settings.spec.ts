@@ -15,7 +15,6 @@ import {
   cliVersion,
   expect,
   libraryPath,
-  loadLines,
   machineLabel,
   test,
 } from "./harness/cli.ts";
@@ -30,7 +29,7 @@ const launchLines = [
 const storeLines = [["machine", "--json"]];
 
 const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines, ...storeLines].some(
+  [...launchLines, ...storeLines].some(
     (known) => known.join(" ") === line.join(" ")
   );
 

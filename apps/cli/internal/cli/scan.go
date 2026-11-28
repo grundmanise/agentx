@@ -155,9 +155,10 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 	var sc *scan.Scan
 	var listing *skillContext // what the library entries are built from, read with the rest; nil lists none
 	var installs []home.Install
-	var machine scan.Machine   // this machine and where agentx keeps its files, when listed
-	var settings scan.Settings // the settings nothing else in the inventory carries, when listed
-	var sources []scan.Source  // the sources of the settings, when listed
+	var machine scan.Machine       // this machine and where agentx keeps its files, when listed
+	var settings scan.Settings     // the settings nothing else in the inventory carries, when listed
+	var sources []scan.Source      // the sources of the settings, when listed
+	var adoptable []scan.Adoptable // the skills the other tools installed, when the lineage was read
 	for sc == nil {
 		var journals []string
 		err = home.ReadLocked(lockCtx, inv.dirs.Home, func() error {
@@ -225,6 +226,10 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 				for _, w := range read.absentWarnings(inv, sc.Library()) {
 					sc.Warn(w)
 				}
+				// The other tools' records are judged against the lineage
+				// and the settings of this lock, so that an inventory never
+				// calls a skill adoptable that it lists as managed.
+				adoptable = inv.adoptable(records, s, sc.Warn)
 			case errors.As(err, &f) && f.status == exitStore && ctx.Err() == nil && !inv.git.StoppedChild():
 				// The store's own answer, and not a stop that killed
 				// the git reading it: that is the run's to answer for.
@@ -257,6 +262,9 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 	}
 	if listed {
 		inventory.Machine, inventory.Settings, inventory.Sources = machine, settings, sources
+	}
+	if adoptable != nil {
+		inventory.Adoptable = adoptable
 	}
 	if listing != nil {
 		for _, lib := range sc.Library() {

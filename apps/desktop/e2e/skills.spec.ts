@@ -1,13 +1,8 @@
 import type { Locator, Page } from "@playwright/test";
 
-import {
-  adoption as statesAdoption,
-  inventory as statesInventory,
-  OLD,
-} from "./fixtures/adoption.ts";
+import { inventory as statesInventory, OLD } from "./fixtures/adoption.ts";
 import { manyAgentsInventory, manyConfigurations } from "./fixtures/agents.ts";
 import {
-  adoption,
   configurations,
   fileReads,
   filesOf,
@@ -19,14 +14,14 @@ import {
 } from "./fixtures/skills.ts";
 import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
 import { settled } from "./harness/animations.ts";
-import {
-  configuration,
-  expect,
-  firstInventory,
-  loadLines,
-  test,
-} from "./harness/cli.ts";
+import { configuration, expect, firstInventory, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
+
+declare global {
+  interface Window {
+    bannerTitles?: string[];
+  }
+}
 
 const launchLines = [
   ["version", "--json"],
@@ -65,14 +60,12 @@ const filters = (page: Page) => page.getByRole("dialog", { name: "Filters" });
 /** The alert triangles in `where`: a row's triangle carries its banner's title as its label and tooltip. */
 const alertTriangles = (where: Locator) => where.locator("[aria-label][title]");
 
-/** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
-const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  );
+/** Whether a command line is one the launch runs. */
+const isLaunch = (line: string[]) =>
+  launchLines.some((known) => known.join(" ") === line.join(" "));
 
 /** The command lines the screen itself ran. */
-const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunchOrLoad(l));
+const later = (cli: MockCli) => cli.commands.filter((l) => !isLaunch(l));
 
 /** Opens the Skills screen on the fixture machine and waits for its rows. */
 const openSkills = async (
@@ -82,7 +75,6 @@ const openSkills = async (
   machine: InlineEvent = inventory
 ) => {
   cli.onServeStart({ events: [machine] });
-  cli.register(["skill", "import"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });
@@ -978,7 +970,6 @@ test.describe("the detail pane", () => {
     page,
   }) => {
     cli.onServeStart({ events: [inventory] });
-    cli.register(["skill", "import"], { events: adoption });
     cli.register(["skill", "history", "draft"], { events: [] });
     for (const name of ["gone", "draft", "scratch"]) {
       cli.register(["skill", "files", name], { events: filesOf(name) });
@@ -1047,7 +1038,7 @@ test.describe("the detail pane", () => {
   });
 });
 
-/** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
+/** The command lines the controls ran: everything but the launch and the pane's reads. */
 const ran = (cli: MockCli) =>
   later(cli).filter(
     (l) =>
@@ -1059,7 +1050,6 @@ const ran = (cli: MockCli) =>
 /** Opens the Skills screen with `key` selected, on the machine with a skill to adopt, one whose source was removed and one the CLI refuses to adopt. */
 const openStates = async (cli: MockCli, page: Page, key: string) => {
   cli.onServeStart({ events: [statesInventory] });
-  cli.register(["skill", "import"], { events: statesAdoption });
   for (const name of ["scratch", "lint", "gone"]) {
     cli.register(["skill", "files", name], { events: filesOf(name) });
   }
@@ -1076,6 +1066,23 @@ test.describe("settling a skill", () => {
     cli,
     page,
   }) => {
+    // Each title the pane's banner shows, as the page draws them from the launch on.
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      window.bannerTitles = seen;
+      new MutationObserver(() => {
+        const title = document
+          .querySelector('article [role="note"]')
+          ?.getAttribute("aria-label");
+        if (title !== null && title !== undefined && seen.at(-1) !== title) {
+          seen.push(title);
+        }
+      }).observe(document, {
+        attributes: true,
+        childList: true,
+        subtree: true,
+      });
+    });
     await openStates(cli, page, "scratch");
     // A banner that warns puts a triangle on its row.
     await expect(alertTriangles(row(page, "lint"))).toHaveAttribute(
@@ -1087,6 +1094,10 @@ test.describe("settling a skill", () => {
       name: "Added by Skills CLI",
     });
     await expect(adoptBanner).toContainText("Import to manage it from agentx");
+    // The first title names the tool, which comes with the inventory.
+    expect(await page.evaluate(() => window.bannerTitles)).toEqual([
+      "Added by Skills CLI",
+    ]);
     await adoptBanner.getByRole("button", { name: "Import" }).click();
     await expect(
       toasts(page).getByText("Imported scratch skill")

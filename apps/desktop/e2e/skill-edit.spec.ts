@@ -4,7 +4,7 @@
 // macOS.
 import type { Page } from "@playwright/test";
 
-import { adoption, fileReads, inventory } from "./fixtures/skills.ts";
+import { fileReads, inventory } from "./fixtures/skills.ts";
 import { reviewUpdateDiffs } from "./fixtures/update-diffs.ts";
 import { expect, libraryPath, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
@@ -38,7 +38,6 @@ const openSkill = async (
   key = name
 ) => {
   cli.onServeStart({ events: [inventory] });
-  cli.register(["skill", "import"], { events: adoption });
   for (const n of libraryNames) {
     cli.register(["skill", "history", n], { events: [] });
     cli.register(["skill", "diff", n], { events: [] });

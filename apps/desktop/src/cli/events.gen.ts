@@ -65,6 +65,17 @@ export type PublishOutcome =
   | "refused";
 export type PullOutcome = "fast-forward" | "merged" | "conflict" | "refused";
 export type AdoptionState = "candidate" | "adopted" | "managed" | "refused";
+export type AdoptionTool = "vercel" | "skillshare";
+export type AdoptionRefusal =
+  | "name_taken"
+  | "symlink"
+  | "file"
+  | "no_skill_file"
+  | "tracked"
+  | "unplaced"
+  | "invalid_name"
+  | "repository"
+  | (string & Record<never, never>);
 export type ImportState = "present" | "missing" | "different";
 export type ImportAction =
   | "installed"
@@ -206,6 +217,7 @@ export interface Inventory {
   skills: SkillNode[];
   library: LibraryEntry[];
   installs: Install[];
+  adoptable: Adoptable[];
   mcp_servers: McpServer[];
   plugins: Plugin[];
   edges: Edge[];
@@ -286,6 +298,14 @@ export interface Install {
   removed?: string;
 }
 
+export interface Adoptable {
+  tool: AdoptionTool;
+  source?: string;
+  skills: string[];
+  managed?: string[];
+  refused?: RefusedAdoption[];
+}
+
 export interface McpServer {
   physical_id: string;
   logical_id: string;
@@ -322,6 +342,13 @@ export interface Occurrence {
   scope: OccurrenceScope;
   plugin?: string;
   also_at?: string[];
+}
+
+export interface RefusedAdoption {
+  name: string;
+  reason: AdoptionRefusal;
+  path?: string;
+  link?: string;
 }
 
 export interface ServerVersion {

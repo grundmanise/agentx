@@ -13,8 +13,8 @@ import {
   refusedInPlace,
   twoPluginsInventory,
 } from "./fixtures/fork.ts";
-import { adoption, fileReads, filesOf } from "./fixtures/skills.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { fileReads, filesOf } from "./fixtures/skills.ts";
+import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -22,11 +22,9 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-/** The reads the launch, the store and the detail pane run on their own. */
+/** The reads the launch and the detail pane run on their own. */
 const isRead = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  ) ||
+  launchLines.some((known) => known.join(" ") === line.join(" ")) ||
   ["skill history", "skill files", "skill diff"].includes(
     line.slice(0, 2).join(" ")
   );
@@ -65,7 +63,6 @@ const openSkill = async (
   { key = name, first = inventory } = {}
 ) => {
   cli.onServeStart({ events: [first] });
-  cli.register(["skill", "import"], { events: adoption });
   for (const n of libraryNames) {
     cli.register(["skill", "history", n], { events: [] });
     cli.register(["skill", "files", n], { events: filesOf(n) });

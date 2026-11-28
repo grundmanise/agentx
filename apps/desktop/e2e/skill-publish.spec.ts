@@ -14,7 +14,7 @@ import {
   sourcesWithoutHub,
 } from "./fixtures/publish.ts";
 import { HUB, ACME } from "./fixtures/skills.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli, Reply } from "./harness/cli.ts";
 
 const launchLines = [
@@ -22,10 +22,8 @@ const launchLines = [
   ["doctor", "--json"],
 ];
 
-const isLaunchOrLoad = (line: string[]) =>
-  [...launchLines, ...loadLines].some(
-    (known) => known.join(" ") === line.join(" ")
-  );
+const isLaunch = (line: string[]) =>
+  launchLines.some((known) => known.join(" ") === line.join(" "));
 
 /** The reads the detail pane runs on its own when a skill is selected. */
 const paneReads = new Set(["skill history", "skill files"]);
@@ -33,7 +31,7 @@ const paneReads = new Set(["skill history", "skill files"]);
 /** The command lines run after the launch, but the pane's own reads of history and files. */
 const later = (cli: MockCli) =>
   cli.commands.filter(
-    (l) => !(isLaunchOrLoad(l) || paneReads.has(l.slice(0, 2).join(" ")))
+    (l) => !(isLaunch(l) || paneReads.has(l.slice(0, 2).join(" ")))
   );
 
 /** How many times `skill diff <name>` ran. */

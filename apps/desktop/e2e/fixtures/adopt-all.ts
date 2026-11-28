@@ -1,8 +1,9 @@
 // The Skills fixture's machine with more skills other tools installed: three the Skills CLI added
 // (the Skills fixture's scratch among them), two Skillshare added, and one the CLI refuses to
-// adopt. Its adoption preview, the `skill import --all` runs the adopt dialog is tested against,
-// of one tool and of both, and the machine as each run leaves it.
+// adopt. The `skill import --all` runs the adopt dialog is tested against, of one tool and of
+// both, and the machine as each run leaves it.
 import type {
+  Adoptable,
   AdoptionEvent,
   LibraryEntry,
   ProgressPhase,
@@ -10,10 +11,7 @@ import type {
 } from "#/cli/events.gen.ts";
 
 import type { InlineEvent } from "../harness/cli.ts";
-import {
-  adoption as skillsAdoption,
-  inventory as skillsInventory,
-} from "./skills.ts";
+import { inventory as skillsInventory } from "./skills.ts";
 
 export const VERCEL = "https://github.com/vercel/skills";
 export const TEAM = "https://github.com/team/skills";
@@ -22,8 +20,8 @@ const LOCK = "/home/me/.agents/.skill-lock.json";
 const STORE = "/home/me/.config/skillshare/skills/.metadata.json";
 const universal = ["codex", "gemini-cli"];
 
-/** The Skills CLI's skills to adopt, the Skills fixture's scratch first. */
-export const skillsCliNames = ["scratch", "deck-outline", "commit-style"];
+/** The Skills CLI's skills to adopt, in name order. */
+export const skillsCliNames = ["commit-style", "deck-outline", "scratch"];
 /** Skillshare's skills to adopt. */
 export const skillshareNames = ["api-docs", "frontend__ui"];
 /** The Skills CLI's skill whose source no longer holds it, so a run fails to adopt it. */
@@ -80,10 +78,43 @@ const node = (name: string): SkillNode => ({
 /** The names this fixture adds to the Skills fixture's library; scratch is there already. */
 const added = ["deck-outline", MOVED, ...skillshareNames, "legacy"];
 
+/** The records of `tool` that name `source`, with `managed` adopted. */
+const recordsOf = (
+  tool: Adoptable["tool"],
+  source: string,
+  names: string[],
+  managed: string[]
+): Adoptable => {
+  const taken = names.filter((name) => managed.includes(name));
+  return {
+    skills: names.filter((name) => !managed.includes(name)),
+    source,
+    tool,
+    ...(taken.length === 0 ? {} : { managed: taken }),
+  };
+};
+
+/**
+ * What the tools' records hold with `managed` adopted: legacy, whose record names no source and
+ * which the library holds as a symlink, then the skills of each tool, by the source they name.
+ */
+const adoptableWith = (managed: string[]): Adoptable[] => [
+  {
+    refused: [
+      { name: "legacy", path: "/home/me/work/legacy", reason: "symlink" },
+    ],
+    skills: [],
+    tool: "vercel",
+  },
+  recordsOf("vercel", VERCEL, skillsCliNames, managed),
+  recordsOf("skillshare", TEAM, skillshareNames, managed),
+];
+
 /** The machine with `managed` adopted, each from the source of the tool that installed it. */
 export const inventoryWith = (managed: string[] = []) =>
   ({
     ...skillsInventory,
+    adoptable: adoptableWith(managed),
     library: [
       ...skillsInventory.library.filter((e) => !managed.includes(e.name)),
       ...added
@@ -115,8 +146,8 @@ const record = (
 });
 
 /**
- * Why the CLI refuses legacy, the same in the preview and in a run of every skill: its record
- * names nowhere to install it from, and the library holds a symlink of it.
+ * Why a run of every skill refuses legacy: its record names nowhere to install it from, and the
+ * library holds a symlink of it.
  */
 const legacyReason = `a symlink to /home/me/work/legacy. To import it, move that folder to ${LIBRARY}/legacy`;
 
@@ -140,27 +171,6 @@ const legacyWarning = `legacy could not be imported: ${legacyReason}`;
 /** The hint of a run that failed because the source no longer holds a skill. */
 const movedHint =
   "the source moved or removed it; leave the skill unmanaged, or install another with 'agentx skill add'";
-
-/** What `skill import` would take over with `managed` adopted: every record, in name order. */
-export const previewWith = (managed: string[] = []): AdoptionEvent[] =>
-  [
-    record("api-docs", "skillshare", "candidate"),
-    record(MOVED, "vercel", "candidate"),
-    record("deck-outline", "vercel", "candidate"),
-    record("frontend__ui", "skillshare", "candidate"),
-    legacyRecord,
-    ...skillsAdoption,
-  ].map((r): AdoptionEvent =>
-    managed.includes(r.name)
-      ? { ...r, reason: "agentx already manages it", state: "managed" }
-      : r
-  );
-
-/** A preview with no candidate: everything adopted but the record the CLI refuses. */
-export const nothingToAdopt = previewWith([
-  ...skillsCliNames,
-  ...skillshareNames,
-]);
 
 const progress = (
   phase: ProgressPhase,
@@ -208,8 +218,8 @@ export const skillshareRun: InlineEvent[] = [
 
 /**
  * `skill import --from skills-cli --all`, which adds the Skills CLI's source and adopts two of
- * its three skills: the source no longer holds the third, so it exits 5. It covers the record the
- * preview refuses as well.
+ * its three skills: the source no longer holds commit-style, so it exits 5. It covers the record it
+ * cannot adopt as well.
  */
 export const skillsCliRun: InlineEvent[] = [
   ...progressOf([VERCEL], ["deck-outline", "scratch"]),
@@ -237,13 +247,11 @@ export const skillsCliWarnings = [
  * sources and adopts every skill but `gone`, the ones the Skills CLI's source no longer holds. The
  * sources and the skills come in name order, whichever tool installed them: each source's fetch,
  * then the `blobs` step of its skills, then every `import` step, every `install` step and the one
- * rescan. The record the preview refuses is a skill it cannot adopt, which it logs as a warning
+ * rescan. The record of legacy is a skill it cannot adopt, which it logs as a warning
  * and fails nothing; a skill that is gone fails the run, which exits 5.
  */
 export const bothToolsRun = (gone: string[] = []): InlineEvent[] => {
-  const vercel = ["commit-style", "deck-outline", "scratch"].filter(
-    (name) => !gone.includes(name)
-  );
+  const vercel = skillsCliNames.filter((name) => !gone.includes(name));
   const names = [...skillshareNames, ...vercel];
   const total = 2 + 3 * names.length + 1;
   const steps: [ProgressPhase, string | undefined][] = [

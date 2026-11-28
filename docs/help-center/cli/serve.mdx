@@ -25,9 +25,9 @@ The desktop app runs serve with [`--json`](/cli/output#json-output) and talks to
 
 ## What counts as a change
 
-Serve watches agentx home (`~/.agentx`), the library and the skills directory of every agent client agentx knows, such as `~/.claude/skills`. It does not watch the clients' MCP configuration files: a change there shows at the next rescan.
+Serve watches agentx home (`~/.agentx`), the library and the skills directory of every agent client agentx knows, such as `~/.claude/skills`. It also watches the folders where the Vercel skills CLI and Skillshare record the skills they install. It does not watch the clients' MCP configuration files: a change there shows at the next rescan.
 
-Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. The inventory also carries this machine, its settings and its sources, so a change such as `agentx config set` or `agentx source add` in a terminal reaches the desktop app too. A hub skill shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
+Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. The inventory also carries this machine, its settings and its sources, so a change such as `agentx config set` or `agentx source add` in a terminal reaches the desktop app too. The inventory lists the skills another tool installed that agentx does not manage, so the desktop app offers to [import](/cli/skill-import) them as soon as that tool records them. A hub skill shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
 
 ## What serve repairs at start
 

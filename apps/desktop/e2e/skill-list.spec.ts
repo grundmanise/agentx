@@ -11,7 +11,6 @@ import {
   SKILL_COUNT,
   SKILLS_PER_PLUGIN,
 } from "./fixtures/many-skills.ts";
-import { adoption } from "./fixtures/skills.ts";
 import type { MockCli } from "./harness/cli.ts";
 import { expect, test } from "./harness/cli.ts";
 
@@ -26,7 +25,6 @@ const pane = (page: Page, name: string) =>
 /** Opens the Skills screen on the machine with hundreds of skills, at the skill `name`. */
 const openAt = async (cli: MockCli, page: Page, name: string) => {
   cli.onServeStart({ events: [inventory] });
-  cli.register(["skill", "import"], { events: adoption });
   for (const read of fileReads) {
     cli.register(["skill", "files", ...read.args], { events: read.events });
   }
