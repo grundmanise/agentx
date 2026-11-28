@@ -10,13 +10,22 @@ import (
 	"path/filepath"
 )
 
-// Handshake is what one server declaration exposed the last time it was
-// handshaken, kept in handshakes.json by the declaration's occurrence id.
-// An earlier agentx kept one entry per server, by its logical id.
+// Handshake is what one server declaration exposed the last time it
+// answered a handshake, and why its last handshake failed when it did, kept
+// in handshakes.json by the declaration's occurrence id. A declaration that
+// never answered has no signature and no time. An earlier agentx kept one
+// entry per server, by its logical id.
 type Handshake struct {
-	Signature string `json:"signature"`
-	Tools     []Tool `json:"tools"`
-	At        string `json:"at"` // RFC 3339, UTC
+	Signature string            `json:"signature,omitempty"`
+	Tools     []Tool            `json:"tools"`
+	At        string            `json:"at,omitempty"`    // RFC 3339, UTC
+	Error     *HandshakeFailure `json:"error,omitempty"` // absent once the declaration answers again
+}
+
+// HandshakeFailure is why the last handshake of a declaration failed.
+type HandshakeFailure struct {
+	Reason  string `json:"reason"` // one of the mcp reasons
+	Message string `json:"message"`
 }
 
 // Tool is one tool, prompt, resource or resource template of a server: its

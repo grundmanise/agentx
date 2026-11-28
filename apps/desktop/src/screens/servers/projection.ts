@@ -1,9 +1,10 @@
 // What the MCP servers screen shows, projected from the store and nothing else: one row per
 // logical server, however many agent configurations declare it and in however many versions. Pure
-// functions over the applied inventory's `mcp_servers` nodes and the handshake failures of the
-// last Check tools, so that every later change reads a server the same way. Nothing here
-// predicts: a row changes only when the inventory does. No environment or header value is read:
-// the CLI records only their names, and the screen shows neither.
+// functions over the applied inventory's `mcp_servers` nodes, which carry what each declaration
+// last answered a handshake with and why its last handshake failed, so that every later change
+// reads a server the same way. Nothing here predicts: a row changes only when the inventory
+// does. No environment or header value is read: the CLI records only their names, and the screen
+// shows neither.
 import type {
   HandshakeReason,
   InventoryEvent,
@@ -12,7 +13,6 @@ import type {
   ServerVersion,
   Transport,
 } from "#/cli/events.gen.ts";
-import type { HandshakeFailure } from "#/store/store.ts";
 
 /** Why a declaration's handshake failed, as the Tools column says it. */
 export interface Failure {
@@ -48,7 +48,7 @@ export interface ServerRow {
   turnedOff: boolean;
   /** The plugins that declare it, distinct. */
   plugins: string[];
-  /** The failures of the last check in this session, one per distinct reason. */
+  /** Why the last handshake of its declarations that are on failed, one per distinct reason. */
   failures: Failure[];
 }
 
@@ -110,35 +110,34 @@ const agentsOf = (occurrences: ServerOccurrence[], order: string[]) =>
     occurrences.some((o) => o.configuration === id && isOn(o))
   );
 
-/** The failures of the declarations of one server, one per distinct reason, first hint kept. */
-const failuresOf = (
-  logicalId: string,
-  failures: HandshakeFailure[]
-): Failure[] => {
-  const own = failures.filter((f) => f.logicalId === logicalId);
-  return distinct(own.map((f) => f.error.reason)).map((reason) => ({
-    hint: own.find((f) => f.error.reason === reason)?.error.hint ?? "",
+/**
+ * The failures of the declarations of one server that are on, one per distinct reason, first
+ * hint kept. A declaration its client turned off is never handshaken, so what it last failed
+ * with says nothing now.
+ */
+const failuresOf = (occurrences: ServerOccurrence[]): Failure[] => {
+  const errors = occurrences
+    .filter(isOn)
+    .map((o) => o.handshake_error)
+    .filter((e) => e !== undefined);
+  return distinct(errors.map((e) => e.reason)).map((reason) => ({
+    hint: errors.find((e) => e.reason === reason)?.hint ?? "",
     reason,
     word: failureWords[reason],
   }));
 };
 
-export interface ProjectionInput {
-  inventory: InventoryEvent;
-  handshakeFailures: HandshakeFailure[];
-}
-
 const rowOf = (
   logicalId: string,
   nodes: McpServer[],
-  input: ProjectionInput
+  inventory: InventoryEvent
 ): ServerRow => {
   const occurrences = nodes.flatMap((n) => n.occurrences);
   const signatures = distinct(
     nodes.flatMap((n) => n.versions.map((v) => v.signature))
   );
   const latest = latestOf(nodes.flatMap((n) => n.versions));
-  const order = input.inventory.configurations.map((c) => c.id);
+  const order = inventory.configurations.map((c) => c.id);
   return {
     // The address of a declaration that answered with the latest version, else of the first.
     address: addressOf(
@@ -149,7 +148,7 @@ const rowOf = (
     declaredBy: order.filter((id) =>
       occurrences.some((o) => o.configuration === id)
     ),
-    failures: failuresOf(logicalId, input.handshakeFailures),
+    failures: failuresOf(occurrences),
     key: logicalId,
     name: nodes[0]?.name ?? "",
     plugins: distinct(
@@ -168,13 +167,13 @@ const compareRows = (a: ServerRow, b: ServerRow) =>
   a.key.localeCompare(b.key);
 
 /** One row per logical server, sorted by name. */
-export const projectServers = (input: ProjectionInput): ServerRow[] => {
-  const ids = distinct(input.inventory.mcp_servers.map((n) => n.logical_id));
+export const projectServers = (inventory: InventoryEvent): ServerRow[] => {
+  const ids = distinct(inventory.mcp_servers.map((n) => n.logical_id));
   const rows = ids.map((id) =>
     rowOf(
       id,
-      input.inventory.mcp_servers.filter((n) => n.logical_id === id),
-      input
+      inventory.mcp_servers.filter((n) => n.logical_id === id),
+      inventory
     )
   );
   rows.sort(compareRows);
@@ -199,17 +198,13 @@ export const latestCheck = (rows: ServerRow[]): string | undefined => {
   return best;
 };
 
-/** The declarations whose handshake failed, from the nodes of a `scan --handshake` inventory. */
-export const failuresIn = (servers: McpServer[]): HandshakeFailure[] =>
+/** The reason and the server of each declaration whose handshake failed in a `scan --handshake`. */
+const failuresIn = (servers: McpServer[]) =>
   servers.flatMap((node) =>
     node.occurrences
-      .filter((o) => o.handshake_error !== undefined)
-      .map((o) => ({
-        configuration: o.configuration,
-        error: o.handshake_error ?? { hint: "", message: "", reason: "failed" },
-        logicalId: node.logical_id,
-        ...(o.plugin === undefined ? {} : { plugin: o.plugin }),
-      }))
+      .map((o) => o.handshake_error)
+      .filter((e) => e !== undefined)
+      .map((e) => ({ logicalId: node.logical_id, reason: e.reason }))
   );
 
 const plural = (n: number, one: string, many: string) =>
@@ -235,9 +230,7 @@ export const checkSummary = (servers: McpServer[]): string => {
   const parts = summaryParts
     .map(([reason, words]) => ({
       count: distinct(
-        failures
-          .filter((f) => f.error.reason === reason)
-          .map((f) => f.logicalId)
+        failures.filter((f) => f.reason === reason).map((f) => f.logicalId)
       ).length,
       words,
     }))

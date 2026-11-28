@@ -16,6 +16,13 @@ import {
 import { expect, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
+declare global {
+  interface Window {
+    /** What the Tools column and Check tools said each time the page drew them, as a test records them. */
+    checkStates?: string[];
+  }
+}
+
 const launchLines = [
   ["version", "--json"],
   ["doctor", "--json"],
@@ -145,12 +152,43 @@ test.describe("rows", () => {
 });
 
 test.describe("Check tools", () => {
-  test("runs a scan with a handshake, shows its failures in the Tools column and toasts the counts", async ({
+  test("runs a scan with a handshake and toasts the counts; the tools, the failures and the time of the check come with serve's next inventory, in one change", async ({
     cli,
     page,
   }) => {
     await openServers(cli, page);
     cli.register(["scan", "--handshake"], { events: [handshakeInventory] });
+    // What the Tools column says of three servers and when the last check was, as the page draws
+    // them from here on.
+    await page.evaluate(() => {
+      const seen: string[] = [];
+      window.checkStates = seen;
+      const record = () => {
+        const state = [
+          ...["filesystem", "github", "linear"].map((name) => {
+            const cell = document.querySelector(`tr[aria-label="${name}"]`)
+              ?.children[2];
+            const said = [...(cell?.children ?? [])].map(
+              (el) => el.textContent
+            );
+            return `${name}: ${said.join(", ")}`;
+          }),
+          document
+            .querySelector('button[title^="Last check"]')
+            ?.getAttribute("title"),
+        ].join(" | ");
+        if (seen.at(-1) !== state) {
+          seen.push(state);
+        }
+      };
+      record();
+      new MutationObserver(record).observe(document.body, {
+        attributes: true,
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
+    });
 
     await checkTools(page).click();
     await expect(
@@ -160,6 +198,15 @@ test.describe("Check tools", () => {
     ).toBeVisible();
     expect(later(cli)).toEqual([["scan", "--handshake", "--json"]]);
     expect(cli.deadlines.at(-1)).toBe(120_000);
+
+    // Serve is asked to scan again: the one-shot's inventory is not applied.
+    await expect.poll(() => cli.serveRequests.length).toBe(1);
+    const [line = ""] = cli.serveRequests;
+    expect(JSON.parse(line)).toEqual({
+      request_id: expect.any(String),
+      type: "refresh",
+    });
+    await cli.serveEmit([{ ...handshakeInventory, scan_counter: 2 }]);
 
     // The failure words, whose hover shows the CLI's hint. Both of github's declarations failed
     // the same way: the toast counts the server once, and the row shows the word once.
@@ -172,24 +219,14 @@ test.describe("Check tools", () => {
     await expect(unreachable).toBeVisible();
     await expect(unreachable).toHaveAttribute("title", LINEAR_HINT);
 
-    // The one-shot's inventory is not applied: the rows keep serve's tool counts.
-    await expect(
-      row(page, "github").getByText("12 tools", { exact: true })
-    ).toBeVisible();
-    await expect(
-      row(page, "filesystem").getByText("4 tools", { exact: true })
-    ).toBeVisible();
-    await expect(
-      row(page, "local-notes").getByText("Not checked")
-    ).toBeVisible();
-
-    // Serve is asked to scan again, which brings the stored signatures in.
-    await expect.poll(() => cli.serveRequests.length).toBe(1);
-    const [line = ""] = cli.serveRequests;
-    expect(JSON.parse(line)).toEqual({
-      request_id: expect.any(String),
-      type: "refresh",
-    });
+    expect(await page.evaluate(() => window.checkStates)).toEqual([
+      expect.stringMatching(
+        /^filesystem: 4 tools \| github: 12 tools \| linear: 5 tools \| Last check: Oct 21/u
+      ),
+      expect.stringMatching(
+        /^filesystem: 6 tools \| github: 12 tools, needs sign-in \| linear: 5 tools, unreachable \| Last check: Oct 22/u
+      ),
+    ]);
   });
 
   test("Cancel in the toast stops the check", async ({ cli, page }) => {

@@ -251,9 +251,9 @@ export const GITHUB_HINT =
 export const LINEAR_HINT = "Check that https://mcp.linear.app/sse answers";
 
 /**
- * The inventory `scan --handshake` emits: github answered 401 to both agents that declare it,
- * linear is unreachable from Gemini CLI, and every other server answered as before, github with
- * more tools than serve knows.
+ * The inventory `scan --handshake` emits, and serve's after it: github answered 401 to both agents
+ * that declare it and keeps the tools of its last answer, linear is unreachable from Gemini CLI,
+ * and filesystem's newer version answered with more tools.
  */
 export const handshakeInventory = {
   configurations,
@@ -268,11 +268,7 @@ export const handshakeInventory = {
             message: "the server answered HTTP 401",
             reason: "unauthorized",
           },
-          signature: "sig-github-2",
         })),
-        versions: [
-          version("sig-github-2", "2026-10-22T09:00:00Z", tools("github", 20)),
-        ],
       };
     }
     if (node.logical_id === "server:linear") {
@@ -290,6 +286,18 @@ export const handshakeInventory = {
               }
             : o
         ),
+      };
+    }
+    if (node.logical_id === "server:pkg-filesystem") {
+      return {
+        ...node,
+        occurrences: node.occurrences.map((o) =>
+          o.configuration === "codex" ? { ...o, signature: "sig-fs-3" } : o
+        ),
+        versions: [
+          version("sig-fs-1", "2026-10-18T08:00:00Z", tools("fs", 3)),
+          version("sig-fs-3", "2026-10-22T10:30:00Z", tools("fs", 6)),
+        ],
       };
     }
     return node;

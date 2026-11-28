@@ -260,7 +260,8 @@ type ServerOccurrence struct {
 	Enabled       *bool           `json:"enabled,omitempty"` // false only when the client records the server as turned off
 }
 
-// HandshakeError is why this scan's handshake of a declaration failed.
+// HandshakeError is why the last handshake of a declaration failed: this
+// scan's, else the one the handshakes file keeps.
 type HandshakeError struct {
 	Reason  string `json:"reason"` // one of the mcp reasons
 	Message string `json:"message"`
@@ -392,7 +393,8 @@ func (s *Scan) Library() []LibrarySkill { return s.library }
 func (s *Scan) Warn(message string) { s.warn(message) }
 
 // Inventory composes the inventory, once per Scan, and returns it with the
-// handshakes this scan took, by occurrence id, for the handshakes file.
+// handshakes this scan took, those that failed among them, by occurrence
+// id, for the handshakes file.
 func (s *Scan) Inventory() (Inventory, map[string]home.Handshake) {
 	fresh := s.composeServers()
 	return s.finish(), fresh

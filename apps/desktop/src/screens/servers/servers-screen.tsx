@@ -62,11 +62,7 @@ const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
 export const ServersScreen = () => {
   const routeKey = useRouteKey();
   const inventory = useAppStore((s) => s.inventory);
-  const handshakeFailures = useAppStore((s) => s.handshakeFailures);
-  const rows =
-    inventory === undefined
-      ? none
-      : projectServers({ handshakeFailures, inventory });
+  const rows = inventory === undefined ? none : projectServers(inventory);
   const configurations = inventory?.configurations ?? [];
   // Only the agent configurations that declare a server are filter choices.
   const declaring = configurations.filter((c) =>
