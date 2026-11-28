@@ -373,7 +373,7 @@ func (inv *invocation) printInventory(inventory scan.Inventory) {
 			}
 			if e := o.HandshakeErr; e != nil {
 				cells = append(cells, c(handshakeLabels[e.Reason], warnStyle))
-				if h := handshakeLabels[e.Reason] + ": " + e.Hint; !slices.Contains(hints, h) {
+				if h := handshakeLabels[e.Reason] + ": " + e.Hint; !e.Stored && !slices.Contains(hints, h) {
 					hints = append(hints, h)
 				}
 			}

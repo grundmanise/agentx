@@ -428,6 +428,12 @@ func TestScanHandshake(t *testing.T) {
 		equal(t, "fix handshake_error once it answered again", d.occurrence["handshake_error"], nil)
 	}
 
+	// A plain scan says why the last handshake failed on the server's row,
+	// and prints no hint for it.
+	out = h.run("scan")
+	contains(t, "stdout of a plain scan", out.stdout, "needs sign-in\n")
+	equal(t, "hints of a plain scan", strings.Count(out.stderr, "hint: "), 0)
+
 	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "soon"
 	out = h.run("--json", "scan", "--handshake")
 	equal(t, "exit", out.exit, 1)

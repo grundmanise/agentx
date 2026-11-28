@@ -112,7 +112,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 			}
 			fresh[occurrence] = stored
 		case d.fresh == nil && stored.Error != nil:
-			failed = &HandshakeError{Reason: stored.Error.Reason, Message: stored.Error.Message, Hint: mcp.Hint(stored.Error.Reason, d.server)}
+			failed = &HandshakeError{Reason: stored.Error.Reason, Message: stored.Error.Message, Hint: mcp.Hint(stored.Error.Reason, d.server), Stored: true}
 		}
 		node, ok := s.servers[physical]
 		if !ok {

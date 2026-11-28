@@ -267,6 +267,7 @@ type HandshakeError struct {
 	Reason  string `json:"reason"` // one of the mcp reasons
 	Message string `json:"message"`
 	Hint    string `json:"hint"`
+	Stored  bool   `json:"-"` // the handshakes file keeps it: no handshake of this scan failed so
 }
 
 // Plugin is one plugin bundle installed in one configuration, in one version.
