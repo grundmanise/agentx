@@ -27,9 +27,10 @@ type Options struct {
 type Inventory struct {
 	InstanceID     string          `json:"instance_id"`
 	ScanCounter    int             `json:"scan_counter"`
-	Machine        Machine         `json:"machine"`  // id and label from the scan; the rest filled in by the caller
-	Settings       Settings        `json:"settings"` // filled in by the caller, from the machine settings
-	Sources        []Source        `json:"sources"`  // filled in by the caller, from the machine settings and the store
+	Machine        Machine         `json:"machine"`                   // id and label from the scan; the rest filled in by the caller
+	Settings       Settings        `json:"settings"`                  // filled in by the caller, from the machine settings
+	Sources        []Source        `json:"sources"`                   // filled in by the caller, from the machine settings and the store
+	UpdatesChecked string          `json:"updates_checked,omitempty"` // filled in by the caller: when an update check last ended well, RFC 3339 in UTC
 	Configurations []Configuration `json:"configurations"`
 	Skills         []Skill         `json:"skills"`
 	Library        []LibraryEntry  `json:"library"`   // filled in by the caller, which reads the lineage

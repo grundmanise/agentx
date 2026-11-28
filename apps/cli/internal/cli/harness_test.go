@@ -313,18 +313,21 @@ type serveProc struct {
 }
 
 // withoutFetchTimes is an inventory event as a key that leaves out its
-// counter and the times its sources were fetched and checked: ok is false
-// for any other line. Each serve starts with an update check that fetches
-// every source, which gives an inventory that differs from the one before in
-// those times alone, whenever the check ends. The harness drops such an
-// inventory, so that a test about anything else reads the messages it is
-// about; a test about the fetch times reads them from the settings.
+// counter, the times its sources were fetched and checked and the time of
+// the last update check: ok is false for any other line. Each serve starts
+// with an update check that fetches every source, which gives an inventory
+// that differs from the one before in those times alone, whenever the check
+// ends. The harness drops such an inventory, so that a test about anything
+// else reads the messages it is about; a test about the fetch times reads
+// them from the settings, and one about the time of a check from the
+// inventory that carries what the check found.
 func withoutFetchTimes(line string) (key string, ok bool) {
 	var e map[string]any
 	if json.Unmarshal([]byte(line), &e) != nil || e["type"] != "inventory" {
 		return "", false
 	}
 	delete(e, "scan_counter")
+	delete(e, "updates_checked")
 	sources, _ := e["sources"].([]any)
 	for _, s := range sources {
 		if m, isMap := s.(map[string]any); isMap {
@@ -483,7 +486,7 @@ func (p *serveProc) response(id any) (result, rpcError jsonEvent) {
 			if err := json.Unmarshal([]byte(line), &m); err != nil {
 				p.t.Fatalf("not a JSON message: %q: %v", line, err)
 			}
-			if m["jsonrpc"] == nil && (m["type"] == "update_check" || p.passInventories && m["type"] == "inventory") {
+			if m["jsonrpc"] == nil && p.passInventories && m["type"] == "inventory" {
 				continue
 			}
 			if m["jsonrpc"] != "2.0" || m["id"] != id {
@@ -555,10 +558,7 @@ func (p *serveProc) answered(id any) jsonEvent {
 	return result
 }
 
-// next returns the next stdout event, which must be of type typ. The
-// update_check that ends each update check of serve, whenever that check
-// ends, is passed over unless typ asks for one: most tests are about what
-// comes around them.
+// next returns the next stdout event, which must be of type typ.
 func (p *serveProc) next(typ string) jsonEvent {
 	p.t.Helper()
 	deadline := time.After(serveDeadline)
@@ -575,9 +575,6 @@ func (p *serveProc) next(typ string) jsonEvent {
 			checkEvent(p.t, e)
 			if e["schema_version"] != float64(schemaVersion) {
 				p.t.Errorf("event %v: schema_version = %v, want %d", e, e["schema_version"], schemaVersion)
-			}
-			if e["type"] == "update_check" && e["type"] != typ {
-				continue
 			}
 			if e["type"] != typ {
 				p.t.Fatalf("next event = %v, want type %s", e, typ)

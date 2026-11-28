@@ -108,7 +108,8 @@ func (h *harness) refMap() map[string]string {
 // git; the skill beside it is current and gets no candidate. The other
 // source is one warning naming it and the skill it left unchecked, and the
 // run exits with its code. The reachable source's last_fetched is
-// rewritten and the other's is left as it was. The library is not touched.
+// rewritten and the other's is left as it was, and the inventory says when
+// the check ended. The library is not touched.
 func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 	t.Parallel()
 	h, s, first := checkHarness(t)
@@ -202,6 +203,7 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 	} else {
 		equal(t, "the inventory's candidate.upstream_time", entry["candidate"].(map[string]any)["upstream_time"], secondTime)
 	}
+	checkedAt(t, h.inventory(t))
 }
 
 // The dates the events report versions by, as the fixtures make them:
@@ -1425,7 +1427,8 @@ exec `+real+` "$@"
 
 // TestServeChecksForUpdates runs serve: the check starts once the initial
 // inventory is out, and the inventory its write sets off carries the
-// candidate of the update the source holds. A single pass checks nothing.
+// candidate of the update the source holds together with the time the
+// check ended. A single pass checks nothing.
 func TestServeChecksForUpdates(t *testing.T) {
 	t.Parallel()
 	h, s, _ := checkHarness(t)
@@ -1438,17 +1441,32 @@ func TestServeChecksForUpdates(t *testing.T) {
 	equal(t, "the candidate after serve --once", h.ref(lineage.CandidateRef("alpha")), "")
 
 	p := h.serve(t, "--json")
-	p.next("inventory")
-	p.nextEntry("alpha", candidateAt(second))
+	equal(t, "updates_checked at start", p.next("inventory")["updates_checked"], nil)
+	found, _ := p.nextMatching("inventory with alpha's candidate", func(e jsonEvent) bool {
+		return e["type"] == "inventory" && candidateAt(second)(libraryEntry(t, e, "alpha"))
+	})
+	checkedAt(t, found)
 	if h.ref(lineage.CandidateRef("alpha")) == "" {
 		t.Error("no candidate ref for alpha")
 	}
 	equal(t, "exit", p.close(), 0)
 }
 
+// checkedAt is when the inventory says an update check last ended well,
+// failing the test when it names no time.
+func checkedAt(t *testing.T, inventory jsonEvent) time.Time {
+	t.Helper()
+	at, _ := inventory["updates_checked"].(string)
+	checked, err := time.Parse(time.RFC3339, at)
+	if err != nil {
+		t.Fatalf("updates_checked %v: %v", inventory["updates_checked"], err)
+	}
+	return checked
+}
+
 // TestServeChecksInTextMode runs serve without --json, whose inventory lists
 // no library: it checks all the same, since the settings hold a source, pins
-// the candidate, and prints the line that ends the check.
+// the candidate, and records when the check ended.
 func TestServeChecksInTextMode(t *testing.T) {
 	t.Parallel()
 	h, s, _ := checkHarness(t)
@@ -1456,22 +1474,8 @@ func TestServeChecksInTextMode(t *testing.T) {
 	s.commit("second version")
 	p := h.serve(t)
 	p.line("inventory 1: 1 configuration, 2 skills")
-	// The rescan the check's write sets off prints an inventory line of its
-	// own, before or after the check's.
-	deadline := time.After(serveDeadline)
-	for got := ""; got == ""; {
-		select {
-		case line, ok := <-p.lines:
-			if !ok {
-				t.Fatal("serve ended before the check's line")
-			}
-			if !strings.HasPrefix(line, "inventory ") {
-				got = line
-				equal(t, "the check's line", got, "check: ok")
-			}
-		case <-deadline:
-			t.Fatalf("no line of the check within %s", serveDeadline)
-		}
+	if !waitFor(filepath.Join(h.agentx, "checked")) {
+		t.Fatal("the check at launch recorded no time")
 	}
 	if h.ref(lineage.CandidateRef("alpha")) == "" {
 		t.Error("no candidate for alpha")
@@ -1567,7 +1571,6 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 	p := h.serve(t, "--json")
 	p.next("inventory")
 	p.nextEntry("alpha", candidateAt(second))
-	p.nextMatching("the update_check", func(e jsonEvent) bool { return e["type"] == "update_check" })
 	p.until("alive")
 	equal(t, "exit", p.close(), 0)
 

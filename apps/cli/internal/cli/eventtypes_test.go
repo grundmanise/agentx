@@ -59,7 +59,6 @@ var eventTypes = []struct {
 	{"inventory", inventoryEvent{}},
 	{"doctor", doctorEvent{}},
 	{"adoption", adoptionEvent{}},
-	{"update_check", updateCheckEvent{}},
 	{"listening", listeningEvent{}},
 }
 
@@ -419,8 +418,8 @@ func tsLiterals(values []string) []string {
 	return q
 }
 
-// eventTypeName is the TypeScript name of an event type: update_check
-// is UpdateCheckEvent.
+// eventTypeName is the TypeScript name of an event type: library_skill
+// is LibrarySkillEvent.
 func eventTypeName(typ string) string {
 	var b strings.Builder
 	for _, w := range strings.Split(typ, "_") {

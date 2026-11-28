@@ -106,21 +106,6 @@ export interface Outcome {
   startError?: string;
 }
 
-/** What a finished command was, for the slices that reload after it (src/store/loaders.ts). */
-export interface Finished extends Outcome {
-  args: readonly string[];
-  command: string;
-  /** The caller said it only reads, with `sideEffect: false`: it changed nothing. */
-  read: boolean;
-}
-
-const finishedListeners = new Set<(finished: Finished) => void>();
-
-/** Calls `handle` after every command the runner runs. */
-export const onFinished = (handle: (finished: Finished) => void) => {
-  finishedListeners.add(handle);
-};
-
 const setPending = (label: string, runId: string | undefined) => {
   useAppStore.setState(({ pending }) => {
     const { [label]: _, ...rest } = pending;
@@ -385,8 +370,5 @@ export const agentx = async (
         void agentx(args, options);
       })
   );
-  for (const handle of finishedListeners) {
-    handle({ ...outcome, args, command: commandOf(args), read });
-  }
   return outcome;
 };

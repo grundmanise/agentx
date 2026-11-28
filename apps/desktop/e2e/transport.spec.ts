@@ -45,7 +45,7 @@ test("a run streams its events as they arrive", async ({ cli, page }) => {
   expect(await items(page)).toEqual([
     {
       value: {
-        event: { cli_version: "1.2.0", schema_version: 5, type: "version" },
+        event: { cli_version: "1.2.0", schema_version: 6, type: "version" },
         kind: "event",
       },
       what: "line",
@@ -127,10 +127,10 @@ test("serve's own lines arrive in order, with their child id", async ({
     await page.evaluate(async () => await window.transport.serveStart())
   ).toBe(1);
   await cli.serveEmit([
-    { checked_at: "2026-11-24T09:00:00Z", ok: true, type: "update_check" },
+    { code: "refused", message: "cannot watch for changes", type: "error" },
   ]);
   await cli.serveLog([{ level: "warn", message: "careful" }]);
-  await cli.serveEmit([{ checked_at: "now", type: "update_check" }]);
+  await cli.serveEmit([{ code: "store", message: "now", type: "error" }]);
 
   await expect(received(page)).toHaveCount(3);
   expect(await items(page)).toEqual([
@@ -138,10 +138,10 @@ test("serve's own lines arrive in order, with their child id", async ({
       value: {
         childId: 1,
         event: {
-          checked_at: "2026-11-24T09:00:00Z",
-          ok: true,
-          schema_version: 5,
-          type: "update_check",
+          code: "refused",
+          message: "cannot watch for changes",
+          schema_version: 6,
+          type: "error",
         },
         kind: "event",
       },
@@ -153,7 +153,7 @@ test("serve's own lines arrive in order, with their child id", async ({
         event: {
           level: "warn",
           message: "careful",
-          schema_version: 5,
+          schema_version: 6,
           type: "log",
         },
         kind: "log",
@@ -163,7 +163,12 @@ test("serve's own lines arrive in order, with their child id", async ({
     {
       value: {
         childId: 1,
-        event: { checked_at: "now", schema_version: 5, type: "update_check" },
+        event: {
+          code: "store",
+          message: "now",
+          schema_version: 6,
+          type: "error",
+        },
         kind: "event",
       },
       what: "serve",
@@ -193,7 +198,7 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
   expect(cli.serveStarts).toBe(2);
   await cli.serveLog([{ level: "warn", message: "cannot fetch a source" }]);
   await cli.serveEmit([
-    { checked_at: "2026-11-24T09:00:00Z", ok: true, type: "update_check" },
+    { code: "refused", message: "cannot watch for changes", type: "error" },
   ]);
   // Serve is not started yet: its lines wait.
   await expect(received(page)).toHaveCount(2);
@@ -218,7 +223,7 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
         event: {
           level: "warn",
           message: "cannot fetch a source",
-          schema_version: 5,
+          schema_version: 6,
           type: "log",
         },
         kind: "log",
@@ -229,10 +234,10 @@ test("the first run starts serve, whose lines are passed on, in order, once serv
       value: {
         childId: 2,
         event: {
-          checked_at: "2026-11-24T09:00:00Z",
-          ok: true,
-          schema_version: 5,
-          type: "update_check",
+          code: "refused",
+          message: "cannot watch for changes",
+          schema_version: 6,
+          type: "error",
         },
         kind: "event",
       },
@@ -272,7 +277,7 @@ test("a refresh is a JSON-RPC request, whose answer arrives as a refresh_complet
           ok: true,
           request_id: "r1",
           scan_counter: 3,
-          schema_version: 5,
+          schema_version: 6,
           type: "refresh_complete",
         },
         kind: "event",

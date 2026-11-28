@@ -29,7 +29,6 @@ import { SkillsScreen } from "#/screens/skills/skills-screen.tsx";
 import { SourcesScreen } from "#/screens/sources/sources-screen.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
 import type { Step, StartupState } from "#/startup/startup.ts";
-import { startLoaders } from "#/store/loaders.ts";
 
 /** The screens built so far, by path; the others show their placeholder. */
 const built: Record<string, ReactElement> = {
@@ -110,13 +109,6 @@ export const App = () => {
   useEffect(() => {
     launch();
   }, []);
-
-  // The store loads its slices once the checks pass: nothing runs a command before they do.
-  useEffect(() => {
-    if (startup.ready) {
-      startLoaders();
-    }
-  }, [startup.ready]);
 
   // The app checks for its own update once the checks pass, so the startup stays offline.
   useEffect(

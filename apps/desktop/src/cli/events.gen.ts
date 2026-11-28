@@ -5,7 +5,7 @@
 
 // The output schema version this app reads. An event of another version is
 // refused.
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 // What every event starts with.
 export interface Envelope {
@@ -213,6 +213,7 @@ export interface Inventory {
   machine: Machine;
   settings: InventorySettings;
   sources: Source[];
+  updates_checked?: string;
   configurations: Configuration[];
   skills: SkillNode[];
   library: LibraryEntry[];
@@ -649,13 +650,6 @@ export interface AdoptionEvent {
   reason?: string;
 }
 
-export interface UpdateCheckEvent {
-  type: "update_check";
-  schema_version: number;
-  checked_at: string;
-  ok: boolean;
-}
-
 export interface ListeningEvent {
   type: "listening";
   schema_version: number;
@@ -701,7 +695,6 @@ export type CliEvent =
   | InventoryEvent
   | DoctorEvent
   | AdoptionEvent
-  | UpdateCheckEvent
   | ListeningEvent
   | OperationEvent
   | FleetEvent;

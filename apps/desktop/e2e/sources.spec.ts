@@ -1705,7 +1705,7 @@ test("a source whose skills share a name: either can be selected, the other left
   ].map(([subpath = "", name = ""]) => ({
     description: name,
     name,
-    schema_version: 5,
+    schema_version: 6,
     source: ACME_ID,
     subpath,
     tree: `t-${subpath}`,

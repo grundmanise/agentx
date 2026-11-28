@@ -158,6 +158,7 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 	var machine scan.Machine       // this machine and where agentx keeps its files, when listed
 	var settings scan.Settings     // the settings nothing else in the inventory carries, when listed
 	var sources []scan.Source      // the sources of the settings, when listed
+	var checked string             // when an update check last ended well, when listed and one did
 	var adoptable []scan.Adoptable // the skills the other tools installed, when the lineage was read
 	for sc == nil {
 		var journals []string
@@ -197,6 +198,9 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 				settings.AnonymousID = anonymousID(machineID)
 			}
 			machine = inv.machineOf(machineID, derivation, s)
+			if at, ok := home.Checked(inv.dirs.Home); ok {
+				checked = at.UTC().Format(time.RFC3339)
+			}
 			// When each skill last entered and left the library, as the
 			// commands that did it recorded, read under the lock they write
 			// it under and listed as it is stored.
@@ -261,7 +265,7 @@ func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, proj
 		inventory.Installs = installs
 	}
 	if listed {
-		inventory.Machine, inventory.Settings, inventory.Sources = machine, settings, sources
+		inventory.Machine, inventory.Settings, inventory.Sources, inventory.UpdatesChecked = machine, settings, sources, checked
 	}
 	if adoptable != nil {
 		inventory.Adoptable = adoptable

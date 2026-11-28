@@ -70,12 +70,6 @@ export interface AppState {
    */
   serveError: ServeError | undefined;
   /**
-   * When an update check last ended well (RFC 3339): serve's own, by its `update_check` event, or
-   * a `skill check-updates` run, which reached every source or all but some (exit 3). Undefined
-   * until one did this session.
-   */
-  lastChecked: string | undefined;
-  /**
    * The store and its size on disk, from `machine`, read when Settings shows Storage: the
    * inventory leaves them out, since every git write changes the size. Undefined before a read.
    */
@@ -162,7 +156,6 @@ export const useAppStore = create<AppState>()(() => ({
   histories: {},
   installable: undefined,
   inventory: undefined,
-  lastChecked: undefined,
   listings: {},
   pending: {},
   refreshes: {},

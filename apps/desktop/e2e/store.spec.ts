@@ -177,7 +177,7 @@ test("logs serve's warnings in its own words, not its debug lines or an old chil
   await expect(logLines(page, "update check:")).toHaveText([warning]);
 });
 
-test("logs a failed scan and update check in serve's words, and nothing of what serve noticed change", async ({
+test("logs a failed scan in serve's words, and nothing of what serve noticed change", async ({
   cli,
   page,
 }) => {
@@ -187,7 +187,6 @@ test("logs a failed scan and update check in serve's words, and nothing of what 
   await cli.serveEmit([
     { ...firstInventory(["codex"]), scan_counter: 2 },
     pdfUpdate,
-    { checked_at: "2026-11-24T09:00:00Z", ok: false, type: "update_check" },
     {
       error: "skills folder changed during the scan",
       ok: false,
@@ -196,19 +195,16 @@ test("logs a failed scan and update check in serve's words, and nothing of what 
     },
   ]);
   await expect(value(page, "Freshness")).toHaveText("failed");
-  // Serve's lines, the commands left out. The update check says nothing in words, so its line is
-  // the event; no line says the inventory or the update.
+  // Serve's lines, the commands left out; no line says the inventory or the update.
   const serveLines = page
     .getByRole("list", { exact: true, name: "Activity log" })
     .getByRole("listitem")
     .filter({ hasNotText: /^agentx /u });
   await expect(serveLines).toHaveText([
     "background scan started",
-    /^update_check \{.*"ok":false/u,
     "skills folder changed during the scan",
   ]);
   await expect(serveLines.nth(1)).toHaveAttribute("data-tone", "failed");
-  await expect(serveLines.nth(2)).toHaveAttribute("data-tone", "failed");
 });
 
 test("ignores the inventory a one-shot writes, and keeps its outcome", async ({

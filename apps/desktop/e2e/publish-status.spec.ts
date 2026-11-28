@@ -9,6 +9,7 @@ import type { PublishOutcome } from "#/cli/events.gen.ts";
 import {
   fromAnotherMachine,
   hub,
+  inventoryOf,
   launch,
   sources,
   syncedLibrary,
@@ -17,6 +18,13 @@ import { HUB, configurations } from "./fixtures/skills.ts";
 import { settled } from "./harness/animations.ts";
 import { expect, test } from "./harness/cli.ts";
 import type { InlineEvent, MockCli } from "./harness/cli.ts";
+
+declare global {
+  interface Window {
+    /** Each pair of the sync status and the popover's check time the page drew, as a test records them. */
+    syncStates?: string[];
+  }
+}
 
 const status = (page: Page) =>
   page
@@ -222,17 +230,13 @@ test.describe("popover", () => {
     cli,
     page,
   }) => {
-    launch(cli, "edited", { hub: { ...hub, url: LONG_REMOTE } });
+    // Checked a while ago, so the time takes the most room it can.
+    launch(cli, "edited", {
+      checked: new Date(Date.now() - 3_000_000).toISOString(),
+      hub: { ...hub, url: LONG_REMOTE },
+    });
     await page.goto("/");
     await expect(status(page)).toHaveText("3 to publish");
-    // Checked a while ago, so the time takes the most room it can.
-    await cli.serveEmit([
-      {
-        checked_at: new Date(Date.now() - 3_000_000).toISOString(),
-        ok: true,
-        type: "update_check",
-      },
-    ]);
     await status(page).click();
     const remote = popover(page).getByText(
       "example-org/a-rather-long-skill-remote-name",
@@ -261,27 +265,16 @@ test.describe("popover", () => {
     );
   });
 
-  test("synced: says so, with when serve last checked; a failed check leaves that time", async ({
+  test("synced: says so, with when the last check ended; what the next check found comes with its time, in one change", async ({
     cli,
     page,
   }) => {
-    launch(cli, "synced");
+    // Five and a half minutes ago: the status reads the clock once a minute.
+    launch(cli, "synced", {
+      checked: new Date(Date.now() - 330_000).toISOString(),
+    });
     await page.goto("/");
     await expect(status(page)).toHaveText("Synced");
-    // Five and a half minutes ago: the status reads the clock once a minute.
-    const checkedAt = new Date(Date.now() - 330_000).toISOString();
-    await cli.serveEmit([
-      {
-        checked_at: checkedAt,
-        ok: true,
-        type: "update_check",
-      },
-      {
-        checked_at: new Date().toISOString(),
-        ok: false,
-        type: "update_check",
-      },
-    ]);
     await status(page).hover();
     await expect(page.getByRole("tooltip")).toHaveText(
       "Synced with your hub · checked 5 minutes ago"
@@ -289,6 +282,51 @@ test.describe("popover", () => {
     await status(page).click();
     await expect(popover(page)).toContainText("Everything is synced");
     await expect(popover(page)).toContainText("Checked 5 minutes ago");
+
+    // Each pair of the status and the popover's check time, as the page draws them from here on.
+    await page.evaluate(() => {
+      const seen: string[] = [];
+      window.syncStates = seen;
+      const record = () => {
+        const label = document.querySelector(
+          'header button[aria-expanded="true"]'
+        )?.textContent;
+        const checked = /(?:Not checked yet|Checked .*)$/u.exec(
+          document.querySelector('[role="dialog"][aria-label="Sync"]')
+            ?.textContent ?? ""
+        )?.[0];
+        const state = `${label}, ${checked}`;
+        if (seen.at(-1) !== state) {
+          seen.push(state);
+        }
+      };
+      record();
+      new MutationObserver(record).observe(document.body, {
+        attributes: true,
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
+    });
+    await cli.serveEmit([
+      {
+        ...inventoryOf(
+          syncedLibrary.map((entry) =>
+            entry.name === "notes" ? { ...entry, ...fromAnotherMachine } : entry
+          ),
+          sources,
+          new Date().toISOString()
+        ),
+        scan_counter: 2,
+      },
+    ]);
+    await expect(group(page, "Incoming").getByRole("listitem")).toHaveText([
+      "notes",
+    ]);
+    expect(await page.evaluate(() => window.syncStates)).toEqual([
+      "Synced, Checked 5 minutes ago",
+      "1 incoming, Checked just now",
+    ]);
   });
 });
 

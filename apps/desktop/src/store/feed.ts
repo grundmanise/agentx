@@ -2,11 +2,10 @@
 // (docs/spec/inventory-ordering.md). Only the active child counts: a later child replaces it, and
 // the events of a child that ended or was replaced are dropped. Within one serve instance an
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
-// first, since counters are never compared across instances. Its `update_check` events say when
-// the last update check ended, which the title bar shows. The activity log
+// first, since counters are never compared across instances. The activity log
 // (src/store/activity-log.ts) records what went wrong with serve, in the CLI's own words: a scan
-// or update check that failed, an `error` event and a warning it logged, and each start and exit
-// of the active child.
+// that failed, an `error` event and a warning it logged, such as one of an update check, and each
+// start and exit of the active child.
 import type {
   InventoryEvent,
   LogEvent,
@@ -242,13 +241,6 @@ const apply = (childId: number, event: ServeEvent) => {
     acknowledge(event);
   } else if (event.type === "search") {
     answerSearch(event);
-  } else if (event.type === "update_check") {
-    // It carries no words of its own: a check that failed shows as the event.
-    if (event.ok) {
-      set({ lastChecked: event.checked_at });
-    } else {
-      logBackground(eventLine(event), { failed: true });
-    }
   } else if (event.type === "error") {
     logBackground(event.message, {
       failed: true,
