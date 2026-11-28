@@ -28,6 +28,17 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/vercel"
 )
 
+// updateCheckEvent ends the report of an update check of the serve child
+// that no inventory carries the time of: one that fetched nothing because
+// the hub holds what the last fetch of it left, and one that did not end
+// well. A check that ended well and fetched emits none: the inventory that
+// follows carries its time as updates_checked, with what it found.
+type updateCheckEvent struct {
+	event
+	CheckedAt string `json:"checked_at"` // when the check ended, RFC 3339 in UTC
+	OK        bool   `json:"ok"`         // whether the check ended well, see home.SetChecked, which then holds checked_at
+}
+
 // hubCheckInterval is how long the serve child waits, once the report
 // of one check is made, before it checks the hub again, see
 // serveChecks.hub. hubCheckEvery is what serve waits, which a test
@@ -291,33 +302,47 @@ type serveChecks struct {
 // background and a command holding the lock for a moment is no reason to
 // drop what it fetched. It reports nothing as it goes and never ends serve:
 // the report it returns is made on the loop's goroutine and carries a
-// warning for each thing the check could not check. A
+// warning for each thing the check could not check, and its update_check
+// when it did not end well, see ended. A
 // machine with no source runs no git at all. A source the settings name
 // and this machine never fetched is fetched too, into a store created for
 // it when there is none. The rescan it asks for once it
-// ended, see rescan, brings the candidates and markers it wrote
+// fetched, see rescan, brings the candidates and markers it wrote
 // into the next inventory, with what the hub holds that a fork lacks, the
 // time the check ended, and every source ref it moved into the source index.
 func (c *serveChecks) startup(ctx context.Context) func() {
 	rep, err := c.inv.checkUpdates(ctx, true, "")
-	c.rescan(ctx, err == nil && !rep.idle)
+	fetched := err == nil && len(rep.refreshed) > 0
+	c.rescan(ctx, fetched)
 	return func() {
 		if err == nil && rep.idle {
 			return // nothing to check, and nothing was
 		}
 		c.inv.reportServeCheck(rep, err)
 		c.failing = err != nil || rep.hubFailed
+		c.ended(rep, err, fetched)
 	}
 }
 
-// rescan asks the loop for a scan once a check has written, and waits for
-// it, so that the inventory that carries what the check wrote, the time it
-// ended among it, goes out also when serve cannot watch for changes. A scan
-// that fails is reported as every rescan's is.
-func (c *serveChecks) rescan(ctx context.Context, wrote bool) {
-	if wrote && c.requests != nil {
+// rescan asks the loop for a scan once a check that fetched has written,
+// and waits for it, so that the inventory that carries what the check
+// wrote, the time it ended among it, goes out also when serve cannot watch
+// for changes. A scan that fails is reported as every rescan's is.
+func (c *serveChecks) rescan(ctx context.Context, fetched bool) {
+	if fetched && c.requests != nil {
 		_, _ = c.requests.Refresh(ctx)
 	}
+}
+
+// ended ends the report of a check that fetched, or failed: a check that
+// ended well and fetched wrote its time under the lock, and the inventory
+// of the rescan carries it, so it emits nothing; any other emits an
+// update_check that is not ok.
+func (c *serveChecks) ended(rep checkReport, err error, fetched bool) {
+	if err == nil && fetched && !rep.recorded.IsZero() {
+		return
+	}
+	c.inv.reportUpdateCheck(time.Now(), false)
 }
 
 // hub is the check the serve child repeats while it runs, see
@@ -327,15 +352,17 @@ func (c *serveChecks) rescan(ctx context.Context, wrote bool) {
 // git ls-remote asks the hub for its fork branches, see
 // gitx.Runner.ForkTips, and when they are what the remote-tracking
 // branches the last fetch left hold, read in one for-each-ref, it fetches
-// nothing, takes no lock and writes the time it ended alone, see
-// home.SetChecked. When they differ, it runs the
+// nothing, takes no lock and asks for no rescan: its report writes the time
+// it ended, see home.SetChecked, and emits an update_check with that time,
+// both on the loop's goroutine, between two scans, so that no inventory
+// after the event carries an earlier time. When they differ, it runs the
 // update check of the hub alone, see checkUpdates: one fetch of
-// it, outside the lock, the comparison of hub skills placed here with
-// what it holds, and one write of its last_fetched and of the time the
-// check ended, under the lock, waited
-// for as the check at start waits. Its report is that check's
-// warnings, and the rescan it asks for once it
-// ended, see rescan, brings what the hub holds that a fork lacks and the
+// it, outside the lock, one write of its last_fetched and of the time the
+// check ended, under the lock, waited for as the check at start waits, and
+// the comparison of hub skills placed here with what it holds. Its report
+// is that check's: its warnings, and its update_check when it did not end
+// well, and the rescan it asks for once it
+// fetched, see rescan, brings what the hub holds that a fork lacks and the
 // time of the check into the
 // next inventory. A failure is a
 // warning prefixed "update check: " when the checks start failing, and
@@ -355,25 +382,34 @@ func (c *serveChecks) hub(ctx context.Context) func() {
 	if err == nil {
 		rep, err = inv.checkHubRemote(ctx, entry.URL, remote)
 	}
-	c.rescan(ctx, err == nil && !rep.idle)
+	fetched := err == nil && len(rep.refreshed) > 0 // a check of the hub alone fetches only the hub
+	c.rescan(ctx, fetched)
 	return func() {
 		if err == nil && rep.idle {
 			return
+		}
+		if err == nil && rep.unchanged {
+			at := time.Now()
+			if err = home.SetChecked(inv.dirs.Home, at); err == nil {
+				c.failing = false
+				inv.reportUpdateCheck(at, true)
+				return
+			}
 		}
 		failed := err != nil || rep.hubFailed
 		if !failed || !c.failing {
 			inv.reportServeCheck(rep, err)
 		}
 		c.failing = failed
+		c.ended(rep, err, fetched)
 	}
 }
 
 // checkHubRemote is the hub check of the serve child, see
 // serveChecks.hub, of the hub at url, the git remote
-// called remote in the store: an empty report, neither idle nor
-// fetched, when the hub holds the fork branches its
-// remote-tracking branches hold, once the time the check ended is written,
-// and otherwise the report of the update
+// called remote in the store: a report that is unchanged, neither idle
+// nor fetched, when the hub holds the fork branches its
+// remote-tracking branches hold, and otherwise the report of the update
 // check of the hub alone. An ls-remote that fails is reported
 // as a fetch of the hub that failed.
 func (inv *invocation) checkHubRemote(ctx context.Context, url, remote string) (checkReport, error) {
@@ -387,7 +423,7 @@ func (inv *invocation) checkHubRemote(ctx context.Context, url, remote string) (
 		return checkReport{}, storeFailure(err)
 	}
 	if maps.Equal(theirs, ours) {
-		return checkReport{}, home.SetChecked(inv.dirs.Home, time.Now())
+		return checkReport{unchanged: true}, nil
 	}
 	return inv.checkUpdates(ctx, true, url)
 }
@@ -407,6 +443,17 @@ func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 	for _, note := range rep.notes {
 		inv.out.warn("update check: " + note)
 	}
+}
+
+// reportUpdateCheck emits the update_check event that ends the report of
+// a check that ended at at, and its line without --json.
+func (inv *invocation) reportUpdateCheck(at time.Time, ok bool) {
+	inv.out.emit(updateCheckEvent{event: newEvent("update_check"), CheckedAt: at.UTC().Format(time.RFC3339), OK: ok})
+	status, style := "ok", okStyle
+	if !ok {
+		status, style = "failed", failStyle
+	}
+	inv.out.print(inv.out.paint(heading, "check"), ": ", inv.out.paint(style, status))
 }
 
 // watchedDirs are the directories a change signal can come from, most

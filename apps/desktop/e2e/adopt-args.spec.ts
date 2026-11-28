@@ -67,7 +67,7 @@ const rowOf = (
     machine: thisMachine,
     mcp_servers: [],
     scan_counter: 1,
-    schema_version: 6,
+    schema_version: 5,
     settings: { ignore_system_files: true },
     sources: [],
     type: "inventory",

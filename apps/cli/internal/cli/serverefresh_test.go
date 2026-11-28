@@ -327,13 +327,16 @@ func TestServeFetchesSourcesSettingsNameWithoutAStore(t *testing.T) {
 
 // TestServeChecksTheHubRemoteWhileItRuns runs serve on machine b of
 // two that share a hub, with the hub check it repeats
-// made a few milliseconds apart. The check at launch fetches. Then, while
-// the hub holds what b's remote-tracking branches hold, each hub check is
-// one ls-remote, fetches nothing and bumps no version.
+// made a few milliseconds apart. The check at launch fetches, so no
+// update_check ends it. Then, while the hub holds what b's
+// remote-tracking branches hold, each hub check is one ls-remote, fetches
+// nothing, bumps no version and ends in an update_check that is ok, with
+// the time agentx home then holds; no inventory follows any of them.
 // Once machine a publishes alpha, the next hub check fetches, and the next
-// inventory says what the hub holds of alpha that b lacks. With the hub out
-// of reach, the checks warn once, however many fail, until one reaches it
-// again: the hub out of reach a second time is a second warning.
+// inventory says what the hub holds of alpha that b lacks, with the time of
+// that check, which is no earlier than the last update_check gave. With the hub out of
+// reach, the checks warn once, however many fail, each ending in an
+// update_check that is not ok, until one reaches it again.
 func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	every := hubCheckEvery
 	hubCheckEvery = 20 * time.Millisecond
@@ -341,82 +344,84 @@ func TestServeChecksTheHubRemoteWhileItRuns(t *testing.T) {
 	a, b, _, remote := twoHomes(t)
 	url := "file://" + remote
 	calls := countingGit(t, b)
-	count := func(call string) int { return strings.Count(strings.Join(calls(), "\n"), call) }
-	fetched := func() int { return count(" fetch --") }
-	// hubChecks waits until n hub checks have begun from now on. The check
-	// before the last of them has made its report by then: serve runs one
-	// at a time, each after the report of the one before.
-	hubChecks := func(n int) {
-		t.Helper()
-		asked := "ls-remote --refs " + url + " refs/heads/skills/*"
-		deadline := time.Now().Add(serveDeadline)
-		for want := count(asked) + n; count(asked) < want; time.Sleep(5 * time.Millisecond) {
-			if time.Now().After(deadline) {
-				t.Fatalf("no %d hub checks within %s", n, serveDeadline)
-			}
-		}
-	}
 	p := b.serve(t, "--json")
 	p.next("inventory")
-	hubChecks(1)
-	atLaunch, version := fetched(), mutationVersion(t, b)
+	checked := func() (e jsonEvent, at time.Time) {
+		t.Helper()
+		e, _ = p.nextMatching("an update_check", func(e jsonEvent) bool { return e["type"] == "update_check" })
+		at, err := time.Parse(time.RFC3339, e["checked_at"].(string))
+		if err != nil {
+			t.Errorf("checked_at %q: %v", e["checked_at"], err)
+		}
+		return e, at
+	}
+	first, last := checked()
+	equal(t, "the first hub check: ok", first["ok"], true)
+	fetched := func() int { return strings.Count(strings.Join(calls(), "\n"), " fetch --") }
+	atLaunch, version, inventories := fetched(), mutationVersion(t, b), p.emitted("inventory")
 	if atLaunch == 0 {
 		t.Error("the check at launch fetched nothing")
 	}
 
-	hubChecks(3)
+	// For longer than serve waits before it scans again for a change it saw.
+	for until := time.Now().Add(time.Second); time.Now().Before(until); {
+		var e jsonEvent
+		e, last = checked()
+		equal(t, "an unchanged remote: ok", e["ok"], true)
+	}
 	equal(t, "an unchanged remote: fetches", fetched(), atLaunch)
 	equal(t, "an unchanged remote: writes", mutationVersion(t, b), version)
+	equal(t, "an unchanged remote: inventories", p.emitted("inventory"), inventories)
+	contains(t, "an unchanged remote: its git", strings.Join(calls(), "\n"), "ls-remote --refs "+url+" refs/heads/skills/*")
+	if at, ok := home.Checked(b.agentx); !ok || at.Before(last) {
+		t.Errorf("agentx home says the last check ended at %v, %v, before the update_check of %v", at, ok, last)
+	}
 
 	published := a.commitFork("alpha", forkNotes("one", "one, a"))
 	a.mustRun("skill", "publish", "alpha")
-	ahead, _ := p.nextEntry("alpha", func(e jsonEvent) bool { return e["hub_ahead"] != nil })
-	equal(t, "what the hub holds of alpha", ahead["hub_ahead"].(map[string]any)["commit"], published)
+	found, _ := p.nextMatching("inventory with what the hub holds of alpha", func(e jsonEvent) bool {
+		return e["type"] == "inventory" && libraryEntry(t, e, "alpha")["hub_ahead"] != nil
+	})
+	equal(t, "what the hub holds of alpha", libraryEntry(t, found, "alpha")["hub_ahead"].(map[string]any)["commit"], published)
+	if at := checkedAt(t, found); at.Before(last) {
+		t.Errorf("the inventory says the last check ended at %v, before the update_check of %v", at, last)
+	}
+	// The same inventory carries what the check that fetched it recorded.
+	for _, src := range found["sources"].([]any) {
+		if src := src.(map[string]any); src["hub"] == true {
+			equal(t, "the time of the check that fetched the hub", found["updates_checked"], src["last_fetched"])
+		}
+	}
 	if fetched() == atLaunch {
 		t.Error("the check of a remote another machine published to fetched nothing")
 	}
 
 	away := remote + ".away"
-	for range 2 {
-		if err := os.Rename(remote, away); err != nil {
-			t.Fatal(err)
-		}
-		hubChecks(3)
-		if err := os.Rename(away, remote); err != nil {
-			t.Fatal(err)
-		}
-		hubChecks(2)
+	if err := os.Rename(remote, away); err != nil {
+		t.Fatal(err)
 	}
+	// A check that began before the rename can still report ok: wait for the first that failed.
+	p.nextMatching("a hub check of the remote out of reach", func(e jsonEvent) bool {
+		return e["type"] == "update_check" && e["ok"] == false
+	})
+	for range 2 {
+		e, _ := checked()
+		equal(t, "a hub out of reach: ok", e["ok"], false)
+	}
+	if err := os.Rename(away, remote); err != nil {
+		t.Fatal(err)
+	}
+	p.nextMatching("an update_check that is ok again", func(e jsonEvent) bool {
+		return e["type"] == "update_check" && e["ok"] == true
+	})
 	equal(t, "exit", p.close(), 0)
 	var unreached []string
 	for _, w := range warnings(b, p.stderr.String()) {
-		if strings.HasPrefix(w, "update check: the hub "+url+": cannot reach it") {
+		if strings.Contains(w, "cannot reach it") {
 			unreached = append(unreached, w)
 		}
 	}
-	equal(t, "warnings of the hub out of reach twice", len(unreached), 2)
-}
-
-// TestServeBringsWhatTheHubHoldsWithTheTimeOfItsCheck runs serve on machine
-// b of two that share a hub, once machine a has published alpha: the
-// inventory that first says what the hub holds of alpha that b lacks also
-// carries the time the check at launch ended, which the first inventory
-// does not.
-func TestServeBringsWhatTheHubHoldsWithTheTimeOfItsCheck(t *testing.T) {
-	t.Parallel()
-	a, b, _, _ := twoHomes(t)
-	published := a.commitFork("alpha", forkNotes("one", "one, a"))
-	a.mustRun("skill", "publish", "alpha")
-	p := b.serve(t, "--json")
-	first := p.next("inventory")
-	equal(t, "updates_checked at start", first["updates_checked"], nil)
-	equal(t, "what the hub holds of alpha at start", libraryEntry(t, first, "alpha")["hub_ahead"], nil)
-	found, _ := p.nextMatching("inventory with what the hub holds of alpha", func(e jsonEvent) bool {
-		return e["type"] == "inventory" && libraryEntry(t, e, "alpha")["hub_ahead"] != nil
-	})
-	equal(t, "what the hub holds of alpha", libraryEntry(t, found, "alpha")["hub_ahead"].(map[string]any)["commit"], published)
-	checkedAt(t, found)
-	equal(t, "exit", p.close(), 0)
+	equal(t, "warnings of the hub out of reach", len(unreached), 1)
 }
 
 // TestReportServeCheck: what serve's check could not check and each note

@@ -1428,7 +1428,7 @@ exec `+real+` "$@"
 // TestServeChecksForUpdates runs serve: the check starts once the initial
 // inventory is out, and the inventory its write sets off carries the
 // candidate of the update the source holds together with the time the
-// check ended. A single pass checks nothing.
+// check ended, so no update_check ends it. A single pass checks nothing.
 func TestServeChecksForUpdates(t *testing.T) {
 	t.Parallel()
 	h, s, _ := checkHarness(t)
@@ -1450,6 +1450,7 @@ func TestServeChecksForUpdates(t *testing.T) {
 		t.Error("no candidate ref for alpha")
 	}
 	equal(t, "exit", p.close(), 0)
+	equal(t, "update_check events of a check that fetched", p.emitted("update_check"), 0)
 }
 
 // checkedAt is when the inventory says an update check last ended well,
@@ -1474,7 +1475,7 @@ func TestServeChecksInTextMode(t *testing.T) {
 	s.commit("second version")
 	p := h.serve(t)
 	p.line("inventory 1: 1 configuration, 2 skills")
-	if !waitFor(filepath.Join(h.agentx, "checked")) {
+	if !waitFor(filepath.Join(h.agentx, "checks", "updates")) {
 		t.Fatal("the check at launch recorded no time")
 	}
 	if h.ref(lineage.CandidateRef("alpha")) == "" {

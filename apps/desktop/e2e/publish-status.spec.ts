@@ -230,13 +230,17 @@ test.describe("popover", () => {
     cli,
     page,
   }) => {
-    // Checked a while ago, so the time takes the most room it can.
-    launch(cli, "edited", {
-      checked: new Date(Date.now() - 3_000_000).toISOString(),
-      hub: { ...hub, url: LONG_REMOTE },
-    });
+    launch(cli, "edited", { hub: { ...hub, url: LONG_REMOTE } });
     await page.goto("/");
     await expect(status(page)).toHaveText("3 to publish");
+    // Checked a while ago, so the time takes the most room it can.
+    await cli.serveEmit([
+      {
+        checked_at: new Date(Date.now() - 3_000_000).toISOString(),
+        ok: true,
+        type: "update_check",
+      },
+    ]);
     await status(page).click();
     const remote = popover(page).getByText(
       "example-org/a-rather-long-skill-remote-name",
@@ -265,7 +269,37 @@ test.describe("popover", () => {
     );
   });
 
-  test("synced: says so, with when the last check ended; what the next check found comes with its time, in one change", async ({
+  test("synced: says so, with when serve last checked; a failed check leaves that time", async ({
+    cli,
+    page,
+  }) => {
+    launch(cli, "synced");
+    await page.goto("/");
+    await expect(status(page)).toHaveText("Synced");
+    // Five and a half minutes ago: the status reads the clock once a minute.
+    const checkedAt = new Date(Date.now() - 330_000).toISOString();
+    await cli.serveEmit([
+      {
+        checked_at: checkedAt,
+        ok: true,
+        type: "update_check",
+      },
+      {
+        checked_at: new Date().toISOString(),
+        ok: false,
+        type: "update_check",
+      },
+    ]);
+    await status(page).hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "Synced with your hub · checked 5 minutes ago"
+    );
+    await status(page).click();
+    await expect(popover(page)).toContainText("Everything is synced");
+    await expect(popover(page)).toContainText("Checked 5 minutes ago");
+  });
+
+  test("what a check found comes with the time of that check, in one change", async ({
     cli,
     page,
   }) => {
@@ -274,13 +308,7 @@ test.describe("popover", () => {
       checked: new Date(Date.now() - 330_000).toISOString(),
     });
     await page.goto("/");
-    await expect(status(page)).toHaveText("Synced");
-    await status(page).hover();
-    await expect(page.getByRole("tooltip")).toHaveText(
-      "Synced with your hub · checked 5 minutes ago"
-    );
     await status(page).click();
-    await expect(popover(page)).toContainText("Everything is synced");
     await expect(popover(page)).toContainText("Checked 5 minutes ago");
 
     // Each pair of the status and the popover's check time, as the page draws them from here on.

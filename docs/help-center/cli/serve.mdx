@@ -53,8 +53,6 @@ The check only records what it found, and when it ended. The next inventory carr
 
 While serve runs, it also checks your [hub](/hub) every 10 minutes for what your other machines published. This check is light: it asks the remote which versions it holds, and fetches only when they differ from what this machine last fetched. If the hub cannot be reached, serve warns once and stays quiet until a check succeeds again.
 
-The inventory carries when the last check ended. So each check that reaches your hub is followed by one `inventory` line, also when it found nothing new.
-
 A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked:
 
 ```text

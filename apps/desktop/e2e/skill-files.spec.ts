@@ -475,7 +475,7 @@ test("the places of a skill come from the inventory, the library first", () => {
     instance_id: "instance-1",
     machine: thisMachine,
     mcp_servers: [],
-    schema_version: 6,
+    schema_version: 5,
     settings: { ignore_system_files: true },
     sources: [],
     warnings: [],

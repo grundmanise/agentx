@@ -514,7 +514,7 @@ func TestServeKeepsServingWhenTheStoreCannotBeRead(t *testing.T) {
 	// The check at launch fetches the source, and the inventory after it
 	// lists the fetch: it is out once a refresh sent after the check is
 	// answered.
-	if !waitFor(filepath.Join(h.agentx, "checked")) {
+	if !waitFor(filepath.Join(h.agentx, "checks", "updates")) {
 		t.Fatal("the check at launch recorded no time")
 	}
 	p.passInventories = true

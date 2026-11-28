@@ -310,6 +310,17 @@ type serveProc struct {
 	// test about something else while sources are added or fetched beside
 	// serve: each changes the inventory's sources.
 	passInventories bool
+
+	mu   sync.Mutex
+	seen map[string]int // every event serve wrote on stdout so far, by type, the ones lines leaves out included
+}
+
+// emitted is how many events of type typ serve has written on stdout so
+// far, an inventory the harness dropped for its times included.
+func (p *serveProc) emitted(typ string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.seen[typ]
 }
 
 // withoutFetchTimes is an inventory event as a key that leaves out its
@@ -379,7 +390,7 @@ func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	p := &serveProc{t: t, stdin: inW, lines: make(chan string, 256), done: make(chan struct{}), cancel: cancel}
+	p := &serveProc{t: t, stdin: inW, lines: make(chan string, 256), done: make(chan struct{}), cancel: cancel, seen: map[string]int{}}
 	rpc := slices.Contains(args, "--json") && !slices.Contains(args, "--once")
 	go func() {
 		defer close(p.lines)
@@ -391,6 +402,14 @@ func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 			line := sc.Text()
 			if rpc {
 				line = ownEvent(line)
+				var e struct {
+					Type string `json:"type"`
+				}
+				if json.Unmarshal([]byte(line), &e) == nil {
+					p.mu.Lock()
+					p.seen[e.Type]++
+					p.mu.Unlock()
+				}
 				if key, ok := withoutFetchTimes(line); ok {
 					if key == last {
 						continue
@@ -486,7 +505,7 @@ func (p *serveProc) response(id any) (result, rpcError jsonEvent) {
 			if err := json.Unmarshal([]byte(line), &m); err != nil {
 				p.t.Fatalf("not a JSON message: %q: %v", line, err)
 			}
-			if m["jsonrpc"] == nil && p.passInventories && m["type"] == "inventory" {
+			if m["jsonrpc"] == nil && (m["type"] == "update_check" || p.passInventories && m["type"] == "inventory") {
 				continue
 			}
 			if m["jsonrpc"] != "2.0" || m["id"] != id {
@@ -558,7 +577,10 @@ func (p *serveProc) answered(id any) jsonEvent {
 	return result
 }
 
-// next returns the next stdout event, which must be of type typ.
+// next returns the next stdout event, which must be of type typ. The
+// update_check that ends an update check of serve no inventory follows,
+// whenever that check ends, is passed over unless typ asks for one: most
+// tests are about what comes around them.
 func (p *serveProc) next(typ string) jsonEvent {
 	p.t.Helper()
 	deadline := time.After(serveDeadline)
@@ -575,6 +597,9 @@ func (p *serveProc) next(typ string) jsonEvent {
 			checkEvent(p.t, e)
 			if e["schema_version"] != float64(schemaVersion) {
 				p.t.Errorf("event %v: schema_version = %v, want %d", e, e["schema_version"], schemaVersion)
+			}
+			if e["type"] == "update_check" && e["type"] != typ {
+				continue
 			}
 			if e["type"] != typ {
 				p.t.Fatalf("next event = %v, want type %s", e, typ)

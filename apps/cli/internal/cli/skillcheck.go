@@ -173,6 +173,13 @@ type checkReport struct {
 	// hubFailed is set when the check set out to reach the hub and
 	// could not.
 	hubFailed bool
+	// recorded is when the check ended well, as it wrote it, see
+	// home.SetChecked: the zero time for a check that did not.
+	recorded time.Time
+	// unchanged is the hub check of the serve child that found the hub
+	// holding what the last fetch of it left, see checkHubRemote: nothing
+	// was fetched and nothing is written yet.
+	unchanged bool
 }
 
 // skillCheckUpdates is agentx skill check-updates: the update check,
@@ -318,8 +325,12 @@ func checkRefusal(failures []checkFailure) error {
 // A check that ended well records when, see home.SetChecked, which an
 // inventory carries as updates_checked: one that fetched a source the
 // settings hold and reached the hub when it set out to. It is written
-// under the lock that records the rest, see recordCheck, so that one
-// inventory carries what the check found and its time.
+// under the lock that records the rest, see recordCheck, which is taken as
+// soon as the fetch of the hub has ended: that fetch moved the
+// remote-tracking branches an inventory reads, a scan waits for the hold,
+// and so one inventory carries what the check found and its time. The
+// comparison with the hub follows the hold, see checkHub: it writes
+// nothing, and only says what the report names.
 //
 // serving is the serve child's check, which differs in three ways. It
 // fetches every source of the settings, a source no skill was installed
@@ -402,9 +413,9 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	fetched := map[string]bool{}
 	importing := lineage.NewRun()
 	// The shared sources are compared, and their candidates written, before
-	// the hub is fetched, so that only local reads stand between the fetch
-	// that moves the hub's remote-tracking branches and the write that
-	// records the check, see recordCheck.
+	// the hub is fetched, so that nothing stands between the fetch that
+	// moves the hub's remote-tracking branches and the hold of the lock
+	// that records the check, see recordCheck.
 	compared := func(results []source.Result) error {
 		for i, res := range results {
 			if targets[i].entry.Hub {
@@ -428,11 +439,17 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		return rep, err
 	}
 	var hubResult *source.Result
+	unreached := "" // the hub, when the check set out to fetch it and could not
 	if acc.entry.URL != "" {
 		hubResult = &results[len(results)-1]
+		if hubResult.Err == nil {
+			fetched[acc.entry.URL] = true // stamped with the shared sources, under the one lock the check takes
+		} else {
+			unreached = acc.entry.URL
+		}
 	}
 	timed := only == "" || hubOnly // a check of one shared source, which a publish to it runs, records no time
-	live, hubLive, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, serving, timed, run.findings, fetched, records, &acc, hubResult)
+	live, hubLive, added, moved, recorded, journaled, err := inv.recordCheck(ctx, gitDir, serving, timed, unreached, run.findings, fetched, records)
 	if !journaled || err == nil {
 		// Recovery of a journal that could not be finished needs the
 		// commits the staging refs hold; otherwise they are what the
@@ -441,6 +458,12 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 	}
 	if err != nil {
 		return rep, err
+	}
+	rep.recorded = recorded
+	if hubResult != nil {
+		if err := inv.checkHub(ctx, gitDir, &acc, *hubResult); err != nil {
+			return rep, err
+		}
 	}
 	// A source removed while the check ran is not one it checked, and
 	// neither is a fetch or a read of it that failed: the removal takes the
@@ -934,13 +957,6 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 // and the skills whose candidate it moved. When every fetch failed it reads
 // no lineage and returns no hub skills.
 //
-// hubResult is the fetch of the hub, nil when the check fetched none, and
-// hub what checkHub fills in from it. A fetch of the hub that succeeded
-// moved its remote-tracking branches, which an inventory reads, so the lock
-// is taken as soon as that fetch has ended, and the comparison with the hub
-// runs under it: a scan waits for the hold, and the inventory it emits
-// carries what the hub holds now together with the time of the check.
-//
 // The lineage is read again under the lock. A skill whose branch no longer
 // names the import commit it was compared with, or that is gone, gets
 // nothing: it was compared with something it no longer is. A fork's is the
@@ -955,37 +971,27 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 // last_fetched for every source that fetched, and the write bumps the
 // version file once. With timed, the time of a check that fetched a source
 // the settings still hold, and reached the hub when it set out to, is
-// written before the lock is released, see home.SetChecked.
+// written before the lock is released, see home.SetChecked, and returned
+// as recorded: unreached is the hub's URL when its fetch failed, and ""
+// otherwise.
 func (inv *invocation) recordCheck(
-	ctx context.Context, gitDir string, wait, timed bool, findings []finding, fetched map[string]bool, records map[string]lineage.Record, hub *hubCheck, hubResult *source.Result,
+	ctx context.Context, gitDir string, wait, timed bool, unreached string, findings []finding, fetched map[string]bool, records map[string]lineage.Record,
 ) (
-	live, hubSkills map[string]lineage.Record, added, moved map[string]bool, journaled bool, err error,
+	live, hubSkills map[string]lineage.Record, added, moved map[string]bool, recorded time.Time, journaled bool, err error,
 ) {
 	live, moved = records, map[string]bool{}
-	hubFetched := hubResult != nil && hubResult.Err == nil
-	if hubResult != nil && !hubFetched {
-		if err := inv.checkHub(ctx, gitDir, hub, *hubResult); err != nil {
-			return nil, nil, nil, nil, false, err
-		}
-	}
-	if len(fetched) == 0 && !hubFetched {
+	if len(fetched) == 0 {
 		// Every fetch failed: nothing was compared, and there is nothing to
 		// write. The sources the settings hold are read again all the same,
 		// a plain read of a file only ever replaced whole, so that a source
 		// removed while its fetch ran is not reported as one that failed.
 		s, err := inv.loadSettings()
 		if err != nil {
-			return nil, nil, nil, nil, false, err
+			return nil, nil, nil, nil, recorded, false, err
 		}
-		return live, nil, sourceURLs(s), moved, false, nil
+		return live, nil, sourceURLs(s), moved, recorded, false, nil
 	}
 	err = inv.holdLock(ctx, wait, true, func() error {
-		if hubFetched {
-			if err := inv.checkHub(ctx, gitDir, hub, *hubResult); err != nil {
-				return err
-			}
-			fetched[hub.entry.URL] = true // stamped with the shared sources
-		}
 		var err error
 		if live, hubSkills, err = inv.checkLineage(ctx, gitDir); err != nil {
 			return err
@@ -1044,16 +1050,19 @@ func (inv *invocation) recordCheck(
 		}
 		applied := m.Apply(inv.refs(ctx))
 		journaled = m.Journaled()
-		hubFailed := hubResult != nil && !hubFetched && added[hub.entry.URL]
-		if applied != nil || !timed || hubFailed || len(stamped) == 0 {
+		if applied != nil || !timed || added[unreached] || len(stamped) == 0 {
 			return applied
 		}
-		return home.SetChecked(inv.dirs.Home, at)
+		if err := home.SetChecked(inv.dirs.Home, at); err != nil {
+			return err
+		}
+		recorded = at
+		return nil
 	})
 	if err != nil {
-		return nil, nil, nil, nil, journaled, mutationFailure(err)
+		return nil, nil, nil, nil, recorded, journaled, mutationFailure(err)
 	}
-	return live, hubSkills, added, moved, journaled, nil
+	return live, hubSkills, added, moved, recorded, journaled, nil
 }
 
 // describeCandidates builds the update_available event of every record,
