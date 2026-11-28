@@ -102,6 +102,8 @@ agentx keeps the result of each declaration in `handshakes.json` in [agentx home
 
 When a handshake fails, the server's row says why, a warning names its file, and a hint says what to do. The server keeps the results of its last successful handshake, if any, and the scan still succeeds.
 
+agentx keeps the reason too. A later scan without `--handshake` shows it on the server's row, without the hint, until a handshake of that server succeeds.
+
 ```text
   servers:
     notion   streamable-http  https://mcp.notion.com/mcp  needs sign-in

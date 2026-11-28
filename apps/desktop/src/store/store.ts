@@ -7,7 +7,6 @@ import { create } from "zustand";
 import type {
   ConflictEvent,
   DiffEvent,
-  HandshakeError,
   HistoryEvent,
   InstallableSkillEvent,
   InventoryEvent,
@@ -71,12 +70,6 @@ export interface AppState {
    */
   serveError: ServeError | undefined;
   /**
-   * When an update check last ended well (RFC 3339): serve's own, by its `update_check` event, or
-   * a `skill check-updates` run, which reached every source or all but some (exit 3). Undefined
-   * until one did this session.
-   */
-  lastChecked: string | undefined;
-  /**
    * The store and its size on disk, from `machine`, read when Settings shows Storage: the
    * inventory leaves them out, since every git write changes the size. Undefined before a read.
    */
@@ -102,11 +95,6 @@ export interface AppState {
    */
   skillMds: Record<string, SkillMdRead>;
   /**
-   * The declarations whose handshake failed in the last Check tools of this session, from that
-   * one-shot's inventory, which is not applied. Replaced by the next check; gone on a restart.
-   */
-  handshakeFailures: HandshakeFailure[];
-  /**
    * What each update changes, read so far, by skill name, from `skill diff <name> --update`:
    * the What's new sheet reads it when it opens.
    */
@@ -117,14 +105,6 @@ export interface AppState {
    * pending merge has none.
    */
   conflicts: Record<string, ConflictEvent>;
-}
-
-/** One declaration of a server whose handshake failed: the server, where it is declared, and why. */
-export interface HandshakeFailure {
-  logicalId: string;
-  configuration: string;
-  plugin?: string;
-  error: HandshakeError;
 }
 
 /**
@@ -173,11 +153,9 @@ export const useAppStore = create<AppState>()(() => ({
   conflicts: {},
   files: {},
   freshness: { kind: "stale" },
-  handshakeFailures: [],
   histories: {},
   installable: undefined,
   inventory: undefined,
-  lastChecked: undefined,
   listings: {},
   pending: {},
   refreshes: {},

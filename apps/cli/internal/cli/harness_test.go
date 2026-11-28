@@ -310,21 +310,35 @@ type serveProc struct {
 	// test about something else while sources are added or fetched beside
 	// serve: each changes the inventory's sources.
 	passInventories bool
+
+	mu   sync.Mutex
+	seen map[string]int // every event serve wrote on stdout so far, by type, the ones lines leaves out included
+}
+
+// emitted is how many events of type typ serve has written on stdout so
+// far, an inventory the harness dropped for its times included.
+func (p *serveProc) emitted(typ string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.seen[typ]
 }
 
 // withoutFetchTimes is an inventory event as a key that leaves out its
-// counter and the times its sources were fetched and checked: ok is false
-// for any other line. Each serve starts with an update check that fetches
-// every source, which gives an inventory that differs from the one before in
-// those times alone, whenever the check ends. The harness drops such an
-// inventory, so that a test about anything else reads the messages it is
-// about; a test about the fetch times reads them from the settings.
+// counter, the times its sources were fetched and checked and the time of
+// the last update check: ok is false for any other line. Each serve starts
+// with an update check that fetches every source, which gives an inventory
+// that differs from the one before in those times alone, whenever the check
+// ends. The harness drops such an inventory, so that a test about anything
+// else reads the messages it is about; a test about the fetch times reads
+// them from the settings, and one about the time of a check from the
+// inventory that carries what the check found.
 func withoutFetchTimes(line string) (key string, ok bool) {
 	var e map[string]any
 	if json.Unmarshal([]byte(line), &e) != nil || e["type"] != "inventory" {
 		return "", false
 	}
 	delete(e, "scan_counter")
+	delete(e, "updates_checked")
 	sources, _ := e["sources"].([]any)
 	for _, s := range sources {
 		if m, isMap := s.(map[string]any); isMap {
@@ -376,7 +390,7 @@ func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	p := &serveProc{t: t, stdin: inW, lines: make(chan string, 256), done: make(chan struct{}), cancel: cancel}
+	p := &serveProc{t: t, stdin: inW, lines: make(chan string, 256), done: make(chan struct{}), cancel: cancel, seen: map[string]int{}}
 	rpc := slices.Contains(args, "--json") && !slices.Contains(args, "--once")
 	go func() {
 		defer close(p.lines)
@@ -388,6 +402,14 @@ func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 			line := sc.Text()
 			if rpc {
 				line = ownEvent(line)
+				var e struct {
+					Type string `json:"type"`
+				}
+				if json.Unmarshal([]byte(line), &e) == nil {
+					p.mu.Lock()
+					p.seen[e.Type]++
+					p.mu.Unlock()
+				}
 				if key, ok := withoutFetchTimes(line); ok {
 					if key == last {
 						continue
@@ -556,9 +578,9 @@ func (p *serveProc) answered(id any) jsonEvent {
 }
 
 // next returns the next stdout event, which must be of type typ. The
-// update_check that ends each update check of serve, whenever that check
-// ends, is passed over unless typ asks for one: most tests are about what
-// comes around them.
+// update_check that ends an update check of serve no inventory follows,
+// whenever that check ends, is passed over unless typ asks for one: most
+// tests are about what comes around them.
 func (p *serveProc) next(typ string) jsonEvent {
 	p.t.Helper()
 	deadline := time.After(serveDeadline)

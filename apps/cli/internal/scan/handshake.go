@@ -27,7 +27,8 @@ const parallel = 4
 // has turned off is never started or connected to. A server that cannot
 // be reached, answers badly or runs out of time is one warning naming its
 // file and name, never its environment or headers, keeps its stored
-// signature, if any, and carries why it failed with a hint on its occurrence.
+// signature, if any, and carries why it failed with a hint on its
+// occurrence, which the handshakes file keeps until the server answers.
 func (s *Scan) Handshake(ctx context.Context, o HandshakeOptions) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup

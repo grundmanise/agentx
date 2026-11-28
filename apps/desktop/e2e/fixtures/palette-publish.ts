@@ -75,13 +75,19 @@ export const syncedLibrary: LibraryEntry[] = library.map((entry) => ({
   state: "current",
 }));
 
-const inventoryOf = (entries: LibraryEntry[], listed: Source[]) =>
+/** The inventory of `entries` and the sources `listed`, with when the last update check ended if one did. */
+export const inventoryOf = (
+  entries: LibraryEntry[],
+  listed: Source[],
+  checked?: string
+) =>
   ({
     configurations,
     library: entries,
     scan_counter: 1,
     sources: listed,
     type: "inventory",
+    ...(checked === undefined ? {} : { updates_checked: checked }),
   }) satisfies InlineEvent;
 
 /** A newer version of pdf from its source, as pdf's library entry carries it. */
@@ -111,6 +117,8 @@ export interface LaunchOptions {
   incoming?: boolean;
   /** The hub the inventory lists in place of the variant's. */
   hub?: Source;
+  /** When the last update check ended, as the inventory says it; no check ended by default. */
+  checked?: string;
 }
 
 /**
@@ -130,7 +138,9 @@ export const launch = (
     })
   );
   const listed = variant === "no-hub" ? [acme] : [options.hub ?? hub, acme];
-  cli.onServeStart({ events: [inventoryOf(entries, listed)] });
+  cli.onServeStart({
+    events: [inventoryOf(entries, listed, options.checked)],
+  });
   for (const entry of entries) {
     cli.register(["skill", "history", entry.name], { events: [] });
     cli.register(["skill", "files", entry.name], {

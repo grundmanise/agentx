@@ -79,7 +79,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	checks := make([]sourceCheck, len(targets))
 	results, err := inv.fetchSources(ctx, gitDir, targets, false, true, func(i int) {
 		checks[i] = inv.checkSource(ctx, targets[i].entry)
-	})
+	}, nil)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,9 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // with current 0 before the first fetch starts, then one per source as its
 // fetch ends. then, when it is not nil, runs in the worker of
 // each target that fetched, with its index, before its progress event, see
-// source.FetchAll.
+// source.FetchAll. beforeHub, when it is not nil, runs once every shared
+// source is fetched and before the hub is, with the results so far; an
+// error it returns ends the run.
 //
 // The lock is taken before the network and released again: an unfinished
 // mutation journal is recovered, and a run that could not write the
@@ -124,7 +126,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // do not name. The remotes are read in one git process and only one that
 // disagrees or is missing is written, which changes no pin: that is what the settings
 // say, and only source add sets it.
-func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool, then func(i int)) ([]source.Result, error) {
+func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool, then func(i int), beforeHub func([]source.Result) error) ([]source.Result, error) {
 	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
 		return nil, storeFailure(err)
 	}
@@ -159,6 +161,11 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	results := make([]source.Result, len(targets))
 	for j, res := range source.FetchAll(ctx, inv.git, gitDir, srcs, sharedThen, done) {
 		results[shared[j]] = res
+	}
+	if beforeHub != nil {
+		if err := beforeHub(results); err != nil {
+			return nil, err
+		}
 	}
 	for k, i := range forks {
 		t := targets[i]

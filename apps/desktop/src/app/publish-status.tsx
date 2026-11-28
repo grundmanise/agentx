@@ -145,7 +145,7 @@ export const PublishStatus = () => {
   const publishing = useSettling(PUBLISH_ALL);
   const progress = usePublishProgress();
   const rim = usePublishRim();
-  const lastChecked = useAppStore((s) => s.lastChecked);
+  const lastChecked = useAppStore((s) => s.inventory?.updates_checked);
   const now = useNow();
   const [open, setOpen] = useState(false);
   if (state === undefined) {

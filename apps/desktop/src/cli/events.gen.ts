@@ -213,6 +213,7 @@ export interface Inventory {
   machine: Machine;
   settings: InventorySettings;
   sources: Source[];
+  updates_checked?: string;
   configurations: Configuration[];
   skills: SkillNode[];
   library: LibraryEntry[];

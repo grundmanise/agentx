@@ -27,9 +27,10 @@ type Options struct {
 type Inventory struct {
 	InstanceID     string          `json:"instance_id"`
 	ScanCounter    int             `json:"scan_counter"`
-	Machine        Machine         `json:"machine"`  // id and label from the scan; the rest filled in by the caller
-	Settings       Settings        `json:"settings"` // filled in by the caller, from the machine settings
-	Sources        []Source        `json:"sources"`  // filled in by the caller, from the machine settings and the store
+	Machine        Machine         `json:"machine"`                   // id and label from the scan; the rest filled in by the caller
+	Settings       Settings        `json:"settings"`                  // filled in by the caller, from the machine settings
+	Sources        []Source        `json:"sources"`                   // filled in by the caller, from the machine settings and the store
+	UpdatesChecked string          `json:"updates_checked,omitempty"` // filled in by the caller: when an update check last ended well, RFC 3339 in UTC
 	Configurations []Configuration `json:"configurations"`
 	Skills         []Skill         `json:"skills"`
 	Library        []LibraryEntry  `json:"library"`   // filled in by the caller, which reads the lineage
@@ -260,11 +261,13 @@ type ServerOccurrence struct {
 	Enabled       *bool           `json:"enabled,omitempty"` // false only when the client records the server as turned off
 }
 
-// HandshakeError is why this scan's handshake of a declaration failed.
+// HandshakeError is why the last handshake of a declaration failed: this
+// scan's, else the one the handshakes file keeps.
 type HandshakeError struct {
 	Reason  string `json:"reason"` // one of the mcp reasons
 	Message string `json:"message"`
 	Hint    string `json:"hint"`
+	Stored  bool   `json:"-"` // the handshakes file keeps it: no handshake of this scan failed so
 }
 
 // Plugin is one plugin bundle installed in one configuration, in one version.
@@ -392,7 +395,8 @@ func (s *Scan) Library() []LibrarySkill { return s.library }
 func (s *Scan) Warn(message string) { s.warn(message) }
 
 // Inventory composes the inventory, once per Scan, and returns it with the
-// handshakes this scan took, by occurrence id, for the handshakes file.
+// handshakes this scan took, those that failed among them, by occurrence
+// id, for the handshakes file.
 func (s *Scan) Inventory() (Inventory, map[string]home.Handshake) {
 	fresh := s.composeServers()
 	return s.finish(), fresh

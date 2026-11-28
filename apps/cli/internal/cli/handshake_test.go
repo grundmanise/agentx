@@ -303,8 +303,8 @@ func TestScanHandshake(t *testing.T) {
 	equal(t, "warnings", len(inventory["warnings"].([]any)), 6)
 
 	// The handshakes file, corrupt before, now keeps the last signature per
-	// declaration and nothing for a server that failed; it is derived
-	// state, so no version bump.
+	// declaration that answered and why the handshake of each other one
+	// failed; it is derived state, so no version bump.
 	stored := map[string]map[string]any{}
 	b, err := os.ReadFile(filepath.Join(h.agentx, "handshakes.json"))
 	if err != nil {
@@ -313,7 +313,9 @@ func TestScanHandshake(t *testing.T) {
 	if err := json.Unmarshal(b, &stored); err != nil {
 		t.Fatal(err)
 	}
-	equal(t, "stored declarations", len(stored), 3)
+	equal(t, "stored declarations", len(stored), 8)
+	locked := nodes["locked"][0]["occurrences"].([]any)[0].(map[string]any)
+	equal(t, "locked stored", fmt.Sprint(stored[locked["id"].(string)]), "map[error:map[message:initialize: HTTP 401 Unauthorized reason:unauthorized] tools:[]]")
 	equal(t, "stored signature a", stored[occurrenceA]["signature"], variantA["signature"])
 	entry := stored[occurrenceB]
 	equal(t, "stored signature b", entry["signature"], variantB["signature"])
@@ -326,12 +328,13 @@ func TestScanHandshake(t *testing.T) {
 		t.Errorf("the handshake bumped the version file: %v", err)
 	}
 
-	// A plain scan reuses the stored signatures: each declaration keeps the
-	// version it answered with, the node keeps its id, and no occurrence
-	// claims a handshake.
+	// A plain scan reuses what is stored: each declaration keeps the
+	// version it answered with or why its handshake failed, the node keeps
+	// its id, and no occurrence claims a handshake.
 	after := h.inventory(t)
 	equal(t, "warnings after", len(after["warnings"].([]any)), 0)
 	plain := serverNodes(after)
+	equal(t, "locked handshake_error after", fmt.Sprint(plain["locked"][0]["occurrences"].([]any)[0].(map[string]any)["handshake_error"]), fmt.Sprint(locked["handshake_error"]))
 	equal(t, "fix nodes after", len(plain["fix"]), 1)
 	equal(t, "fix physical_id after", plain["fix"][0]["physical_id"], fix[0]["physical_id"])
 	plainFix := versions(plain["fix"][0])
@@ -398,6 +401,17 @@ func TestScanHandshake(t *testing.T) {
 		equal(t, "fix signature from an earlier file", d.occurrence["signature"], variantB["signature"])
 	}
 
+	// A handshake that fails keeps the version the declaration last answered
+	// with and says why it failed, in every scan until it answers again.
+	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "1ns"
+	equal(t, "exit of a handshake out of time", h.run("--json", "scan", "--handshake").exit, 0)
+	for _, d := range serverDeclarations(h.inventory(t))["fix"] {
+		equal(t, "fix signature after a handshake that failed", d.occurrence["signature"], variantB["signature"])
+		failure, _ := d.occurrence["handshake_error"].(map[string]any)
+		equal(t, "fix reason after a handshake that failed", failure["reason"], "timeout")
+	}
+	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "1s"
+
 	// The text output of a handshake, which prints no secret either.
 	args = []string{"scan", "--handshake"}
 	out = h.run(args...)
@@ -410,6 +424,15 @@ func TestScanHandshake(t *testing.T) {
 	contains(t, "stdout", out.stdout, "timed out\n")
 	contains(t, "stderr", out.stderr, "hint: needs sign-in: the server wants a sign-in")
 	equal(t, "timeout hints", strings.Count(out.stderr, "hint: timed out: "), 1)
+	for _, d := range serverDeclarations(h.inventory(t))["fix"] {
+		equal(t, "fix handshake_error once it answered again", d.occurrence["handshake_error"], nil)
+	}
+
+	// A plain scan says why the last handshake failed on the server's row,
+	// and prints no hint for it.
+	out = h.run("scan")
+	contains(t, "stdout of a plain scan", out.stdout, "needs sign-in\n")
+	equal(t, "hints of a plain scan", strings.Count(out.stderr, "hint: "), 0)
 
 	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "soon"
 	out = h.run("--json", "scan", "--handshake")

@@ -1,12 +1,11 @@
 // Check tools: `agentx scan --handshake --json` as a one-shot, with a deadline and a Cancel in its
 // toast. Its inventory is never applied to the one the screens show (docs/spec/inventory-ordering.md):
-// the runner asks serve to scan again, which brings the stored signatures in. What the app keeps of
-// the one-shot is its outcome: the declarations whose handshake failed, shown in the Tools column
-// until the next check or a restart, and the toast's counts.
-import { EXIT_CODES } from "#/cli/events.gen.ts";
+// the scan stores what each server answered and why a handshake failed, and the next inventory of
+// serve brings the tool counts, the failures and the time of the check in together. What the app
+// takes from the one-shot is the toast's counts.
 import type { CliEvent, McpServer } from "#/cli/events.gen.ts";
 import { notify } from "#/components/toast.tsx";
-import { checkSummary, failuresIn } from "#/screens/servers/projection.ts";
+import { checkSummary } from "#/screens/servers/projection.ts";
 import { cancelCommand, agentx, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -39,14 +38,9 @@ export const checkTools = async () => {
     },
     { kind: "progress", lasting: true }
   );
-  const outcome = await agentx(["scan", "--handshake"], {
+  await agentx(["scan", "--handshake"], {
     deadlineMs: CHECK_DEADLINE_MS,
     label: CHECK_TOOLS,
     success: (events) => checkSummary(serversOf(events)),
   });
-  if (outcome.exitCode === EXIT_CODES.ok) {
-    useAppStore.setState({
-      handshakeFailures: failuresIn(serversOf(outcome.events)),
-    });
-  }
 };

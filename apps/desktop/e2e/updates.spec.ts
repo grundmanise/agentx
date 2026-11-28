@@ -36,6 +36,8 @@ declare global {
   interface Window {
     /** The texts the toast showed, in order, with its width, as a test records them. */
     toastTexts?: { text: string; width: number }[];
+    /** Each pair of the dialog's skills and its check time the page drew, as a test records them. */
+    dialogStates?: string[];
   }
 }
 
@@ -832,6 +834,61 @@ test.describe("the Update skills dialog", () => {
       nav.getByRole("button", { exact: true, name: "1 update" })
     ).toBeVisible();
   });
+  test("an update a check found while it is open comes with the time of that check, in one change", async ({
+    cli,
+    page,
+  }) => {
+    await open(cli, page, "pdf", ["pdf"]);
+    // Five and a half minutes ago: the dialog reads the clock once a minute.
+    await cli.serveEmit([
+      {
+        ...inventoryOf(libraryWith(["pdf"])),
+        scan_counter: 2,
+        updates_checked: new Date(Date.now() - 330_000).toISOString(),
+      },
+    ]);
+    await page
+      .getByRole("navigation", { name: "Main" })
+      .getByRole("button", { exact: true, name: "1 update" })
+      .click();
+    const dialog = updateDialog(page);
+    await expect(dialog.getByRole("listitem")).toHaveCount(1);
+    await expect(dialog.getByRole("status")).toHaveText(
+      "Checked 5 minutes ago"
+    );
+
+    // Each pair of the skills listed and the check time, as the page draws them from here on.
+    await page.evaluate(() => {
+      const seen: string[] = [];
+      window.dialogStates = seen;
+      const record = () => {
+        const shown = document.querySelector('[role="dialog"]');
+        const state = `${shown?.querySelectorAll("li").length} listed, ${shown?.querySelector("output")?.textContent}`;
+        if (seen.at(-1) !== state) {
+          seen.push(state);
+        }
+      };
+      record();
+      new MutationObserver(record).observe(document.body, {
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
+    });
+    await cli.serveEmit([
+      {
+        ...inventoryOf(libraryWith(["pdf", "review"])),
+        scan_counter: 3,
+        updates_checked: new Date().toISOString(),
+      },
+    ]);
+    await expect(dialogRow(page, "review")).toBeVisible();
+    expect(await page.evaluate(() => window.dialogStates)).toEqual([
+      "1 listed, Checked 5 minutes ago",
+      "2 listed, Checked just now",
+    ]);
+  });
+
   test("Cancel stops the update that runs and closes the dialog", async ({
     cli,
     page,

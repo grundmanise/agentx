@@ -85,20 +85,34 @@ func (s *Scan) serverLogicalID(server mcp.Server) string {
 
 // composeServers builds the server nodes from the declarations, one per
 // logical server: each declaration's version is this scan's handshake, else
-// the one stored for it, else none. The fresh handshakes are returned by
-// occurrence id for the handshakes file, so two declarations of one server
-// keep their own answers.
+// the one stored for it, else none, and its handshake error is this scan's
+// failure, else the one stored for it. The handshakes this scan took are
+// returned by occurrence id for the handshakes file, so two declarations of
+// one server keep their own answers: an answer whole, and a failure beside
+// the version the declaration last answered with.
 func (s *Scan) composeServers() map[string]home.Handshake {
 	fresh := map[string]home.Handshake{}
 	for _, d := range s.declared {
 		physical := id("server", d.logical, s.MachineID)
 		occurrence := id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
-		signature, tools, at := NoSignature, []home.Tool(nil), ""
-		if d.fresh != nil {
+		signature, tools, at, failed := NoSignature, []home.Tool(nil), "", d.failed
+		stored, _ := s.storedFor(occurrence, d.logical)
+		switch {
+		case d.fresh != nil:
 			signature, tools, at = d.fresh.Signature, s.tools(d.logical, d.fresh.Items), d.at
 			fresh[occurrence] = home.Handshake{Signature: signature, Tools: tools, At: at}
-		} else if h, ok := s.storedFor(occurrence, d.logical); ok {
-			signature, tools, at = h.Signature, keyed(d.logical, h.Tools), h.At
+		case stored.Signature != "":
+			signature, tools, at = stored.Signature, keyed(d.logical, stored.Tools), stored.At
+		}
+		switch {
+		case d.failed != nil:
+			stored.Error = &home.HandshakeFailure{Reason: d.failed.Reason, Message: d.failed.Message}
+			if stored.Tools == nil {
+				stored.Tools = []home.Tool{}
+			}
+			fresh[occurrence] = stored
+		case d.fresh == nil && stored.Error != nil:
+			failed = &HandshakeError{Reason: stored.Error.Reason, Message: stored.Error.Message, Hint: mcp.Hint(stored.Error.Reason, d.server), Stored: true}
 		}
 		node, ok := s.servers[physical]
 		if !ok {
@@ -120,7 +134,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 			Transport:     d.server.Transport,
 			Signature:     signature,
 			Handshake:     d.fresh != nil,
-			HandshakeErr:  d.failed,
+			HandshakeErr:  failed,
 			Plugin:        d.plugin,
 		}
 		if d.disabled {

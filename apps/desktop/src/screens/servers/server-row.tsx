@@ -18,14 +18,14 @@ const failureVariants = cva("type-secondary whitespace-nowrap", {
   },
 });
 
-/** A failure of the last check, in words; hovering it shows the CLI's hint. */
+/** Why a handshake of the last check failed, in words; hovering it shows the CLI's hint. */
 const FailureWord = ({ failure }: { failure: Failure }) => (
   <span title={failure.hint} className={failureVariants(failure)}>
     {failure.word}
   </span>
 );
 
-/** The TOOLS cell: how many tools the last check found, or "Not checked", then this session's failures. */
+/** The TOOLS cell: how many tools the last check found, or "Not checked", then its failures. */
 const Tools = ({ row }: { row: ServerRow }) => (
   <td className="flex min-w-0 flex-col gap-0.5 p-0">
     {row.tools === undefined ? (

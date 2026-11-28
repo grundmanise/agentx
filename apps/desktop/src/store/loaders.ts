@@ -1,8 +1,6 @@
 // The slices that one-shot reads fill: the store and what screens read on demand. This machine,
-// its settings, its sources and the skills another tool installed come with the inventory instead
-// (src/store/feed.ts). A `skill check-updates` run sets when the last check ended; what it found
-// reaches the inventory that follows it.
-import { EXIT_CODES } from "#/cli/events.gen.ts";
+// its settings, its sources, the skills another tool installed and the time of the last update
+// check come with the inventory instead (src/store/feed.ts).
 import type {
   CliEvent,
   DiffEvent,
@@ -13,8 +11,8 @@ import type {
 } from "#/cli/events.gen.ts";
 import { checksPass } from "#/startup/startup.ts";
 import { cachedRead, keepRead } from "#/store/read-cache.ts";
-import { agentx, onFinished } from "#/store/runner.ts";
-import type { CommandOptions, Finished } from "#/store/runner.ts";
+import { agentx } from "#/store/runner.ts";
+import type { CommandOptions } from "#/store/runner.ts";
 import { sourcesOf, useAppStore } from "#/store/store.ts";
 import type { AppState, FilesRead } from "#/store/store.ts";
 
@@ -439,29 +437,4 @@ export const loadUpdateDiff = async (name: string, candidate: string) => {
     },
   }));
   updateDiffCandidates.delete(name);
-};
-
-/** What the store notes after a command that may have changed something. */
-const afterCommand = ({ command, exitCode, read }: Finished) => {
-  if (read) {
-    return;
-  }
-  // A check that could not reach a source (exit 3) still checked the others.
-  if (
-    command === "skill check-updates" &&
-    (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source)
-  ) {
-    useAppStore.setState({ lastChecked: new Date().toISOString() });
-  }
-};
-
-let started = false;
-
-/** Keeps the store current after each command from now on. Called once the checks pass. */
-export const startLoaders = () => {
-  if (started) {
-    return;
-  }
-  started = true;
-  onFinished(afterCommand);
 };

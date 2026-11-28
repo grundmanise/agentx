@@ -443,7 +443,7 @@ const enterConfirms = (event: KeyboardEvent) =>
 const UpdateForm = ({ onClose }: { onClose: () => void }) => {
   const offers = useOfferedUpdates();
   const library = useAppStore((s) => s.inventory?.library);
-  const lastChecked = useAppStore((s) => s.lastChecked);
+  const lastChecked = useAppStore((s) => s.inventory?.updates_checked);
   const run = useUpdateRun((s) => s.run);
   const now = useNow();
   const confirm = useRef<HTMLButtonElement>(null);

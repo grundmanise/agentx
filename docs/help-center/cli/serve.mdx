@@ -49,7 +49,7 @@ The check also:
 - Fetches every source you added, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) does, including sources you have not installed from.
 - Fetches your hub when a hub skill is placed on this machine, and reports what your other machines published to it.
 
-The check only records what it found. Apply an update with [`agentx skill update`](/cli/skill#update-a-skill).
+The check only records what it found, and when it ended. The next inventory carries both together. Apply an update with [`agentx skill update`](/cli/skill#update-a-skill).
 
 While serve runs, it also checks your [hub](/hub) every 10 minutes for what your other machines published. This check is light: it asks the remote which versions it holds, and fetches only when they differ from what this machine last fetched. If the hub cannot be reached, serve warns once and stays quiet until a check succeeds again.
 
